@@ -304,7 +304,7 @@ export async function POST(req: NextRequest) {
                         },
                         action_id: 'refresh_github',
                         style: 'primary',
-                        url: `${process.env.NEXTAUTH_URL || 'http://localhost:9002'}/api/auth/github/slack?user_id=${userId}&channel_id=${channelId}&refresh=true`
+                        url: `${process.env.NEXTAUTH_URL || 'http://localhost:9002'}api/auth/github/slack?user_id=${userId}&channel_id=${channelId}&refresh=true`
                       },
                       {
                         type: 'button',
