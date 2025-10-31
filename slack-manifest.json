@@ -5,6 +5,10 @@
     "background_color": "#2EB67D"
   },
   "features": {
+    "bot_user": {
+      "display_name": "GitPulse",
+      "always_online": false
+    },
     "slash_commands": [
       {
         "command": "/gitpulse",
@@ -12,24 +16,24 @@
         "description": "GitPulse AI assistant",
         "usage_hint": "analyze | create-issue | list-issues | list-prs | match-pr | suggest-fix | detect-potential | detect-resolution"
       }
-    ],
-    "interactivity": {
-      "is_enabled": true,
-      "request_url": "https://devx-rho.vercel.app/api/slack/interactions"
-    }
+    ]
   },
   "oauth_config": {
     "scopes": {
       "bot": [
         "commands",
         "chat:write",
-        "conversations.history",
-        "conversations.read",
+        "channels:history",
+        "channels:read",
         "users:read"
       ]
     }
   },
   "settings": {
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://devx-rho.vercel.app/api/slack/interactions"
+    },
     "event_subscriptions": {
       "request_url": "https://devx-rho.vercel.app/api/slack/events",
       "bot_events": [

@@ -45,11 +45,14 @@ export async function GET(req: NextRequest) {
     }
 
     // Build GitHub OAuth URL with correct redirect URI
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : process.env.NEXTAUTH_URL || 'http://localhost:9002';
-    
-    const redirectUri = `${baseUrl}/api/auth/github/slack`;
+    // Prefer the request origin (works for Vercel previews / deployments). Fall back to env vars.
+    const origin = req.headers.get('origin') || req.headers.get('referer') || '';
+    const baseUrl = origin
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
+      || process.env.NEXTAUTH_URL
+      || 'http://localhost:9002';
+
+    const redirectUri = `${baseUrl.replace(/\/$/, '')}/api/auth/github/slack`;
     
     console.log('🔗 GitHub OAuth redirect setup:', {
       baseUrl,
@@ -60,13 +63,18 @@ export async function GET(req: NextRequest) {
 
     const githubOAuthUrl = new URL('https://github.com/login/oauth/authorize');
     githubOAuthUrl.searchParams.set('client_id', process.env.GITHUB_CLIENT_ID!);
+    // ensure redirect_uri is an absolute URL and URL-encoded by the URL API
     githubOAuthUrl.searchParams.set('redirect_uri', redirectUri);
     githubOAuthUrl.searchParams.set('scope', 'repo,user:email'); // Permissions needed
-    githubOAuthUrl.searchParams.set('state', JSON.stringify({ 
+
+    // Build a defensively-encoded state payload. Always include slack ids we have.
+    const statePayload = {
       slack_user_id: slackUserId,
       channel_id: channelId,
-      timestamp: Date.now()
-    }));
+      timestamp: Date.now(),
+    } as Record<string, any>;
+
+    githubOAuthUrl.searchParams.set('state', JSON.stringify(statePayload));
 
     console.log('Redirecting to GitHub OAuth:', githubOAuthUrl.toString());
     return NextResponse.redirect(githubOAuthUrl.toString());
