@@ -40,7 +40,22 @@ export async function GET(req: NextRequest) {
     const slackUserId = user_id;
     const channelId = channel_id;
     
-    if (!slackUserId) {
+    // If we don't have a direct user_id (button URL), try to extract it from a provided `state` query
+    // This covers cases where callers pre-populate `state` with Slack info before redirecting here.
+    let finalSlackUserId = slackUserId;
+    let finalChannelId = channelId;
+
+    if (!finalSlackUserId && state) {
+      try {
+        const parsed = JSON.parse(state);
+        finalSlackUserId = parsed.slack_user_id || finalSlackUserId;
+        finalChannelId = parsed.channel_id || finalChannelId;
+      } catch (e) {
+        // ignore parse errors - we'll handle missing user below
+      }
+    }
+
+    if (!finalSlackUserId) {
       return NextResponse.json({ error: 'Missing user_id parameter' }, { status: 400 });
     }
 
@@ -69,8 +84,8 @@ export async function GET(req: NextRequest) {
 
     // Build a defensively-encoded state payload. Always include slack ids we have.
     const statePayload = {
-      slack_user_id: slackUserId,
-      channel_id: channelId,
+      slack_user_id: finalSlackUserId,
+      channel_id: finalChannelId,
       timestamp: Date.now(),
     } as Record<string, any>;
 
