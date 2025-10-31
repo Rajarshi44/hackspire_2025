@@ -197,42 +197,197 @@ export async function POST(req: NextRequest) {
           } catch (error) {
             console.error('Error analyzing messages:', error);
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            
+            // Provide specific guidance for auth errors
+            if (errorMessage.includes('invalid_auth')) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '🔐 **Authentication Error**\n\nThe bot needs proper permissions to read channel messages.\n\n**Quick fixes:**\n1. Add bot to this channel: `/invite @GitPulse`\n2. Check if bot has `conversations:history` scope\n3. Verify bot token is correct\n\nSee server logs for detailed error info.',
+              });
+            }
+            
             return NextResponse.json({
               response_type: 'ephemeral',
-              text: `❌ Error analyzing messages: ${errorMessage}. Please try again.`,
+              text: `❌ Error analyzing messages: ${errorMessage}.\n\nTry:\n• \`/gitpulse help\` for available commands\n• Check if bot is added to this channel\n• Contact administrator if issue persists`,
             });
           }
 
         case 'create-issue':
-          return NextResponse.json({
-            response_type: 'ephemeral',
-            text: '📝 Let\'s create a GitHub issue!',
-            blocks: [
-              {
-                type: 'section',
-                text: {
-                  type: 'mrkdwn',
-                  text: '📝 *Create GitHub Issue*\n\nI can help you turn your ideas into actionable GitHub issues. What would you like to work on?'
-                }
+          try {
+            console.log('Creating issue for user:', userId);
+            
+            // Import user service to check GitHub authentication
+            const { slackUserService } = await import('@/lib/slack-user-service');
+            
+            if (!userId) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '❌ Unable to identify user. Please try again.',
+              });
+            }
+            
+            const hasGitHubAuth = await slackUserService.hasGitHubAuth(userId);
+            
+            console.log('User GitHub auth status:', { userId, hasGitHubAuth });
+            
+            if (!hasGitHubAuth) {
+              // User needs to authenticate with GitHub first
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '� GitHub Authentication Required',
+                blocks: [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: '📝 *Create GitHub Issue*\n\nTo create GitHub issues, you need to connect your GitHub account first.'
+                    }
+                  },
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: '🔑 *Why do I need to sign in?*\n• Create issues in your repositories\n• Assign issues to team members\n• Access private repositories\n• Maintain proper attribution'
+                    }
+                  },
+                  {
+                    type: 'actions',
+                    elements: [
+                      {
+                        type: 'button',
+                        text: {
+                          type: 'plain_text',
+                          text: '🔗 Connect GitHub Account'
+                        },
+                        action_id: 'connect_github',
+                        style: 'primary',
+                        url: `${process.env.NEXTAUTH_URL || 'http://localhost:9002'}/api/auth/github/slack?user_id=${userId}&channel_id=${channelId}`
+                      },
+                      {
+                        type: 'button',
+                        text: {
+                          type: 'plain_text',
+                          text: '❌ Cancel'
+                        },
+                        action_id: 'cancel_github_auth'
+                      }
+                    ]
+                  }
+                ]
+              });
+            }
+
+            // User is authenticated - get their repositories
+            const userRepos = await slackUserService.getUserRepositories(userId);
+            console.log('User repositories:', { userId, repoCount: userRepos.length });
+            
+            if (userRepos.length === 0) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '📁 No Repositories Found',
+                blocks: [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: '📝 *Create GitHub Issue*\n\n📁 No repositories found in your GitHub account, or you may need to refresh your connection.'
+                    }
+                  },
+                  {
+                    type: 'actions',
+                    elements: [
+                      {
+                        type: 'button',
+                        text: {
+                          type: 'plain_text',
+                          text: '🔄 Refresh GitHub Connection'
+                        },
+                        action_id: 'refresh_github',
+                        style: 'primary',
+                        url: `${process.env.NEXTAUTH_URL || 'http://localhost:9002'}/api/auth/github/slack?user_id=${userId}&channel_id=${channelId}&refresh=true`
+                      },
+                      {
+                        type: 'button',
+                        text: {
+                          type: 'plain_text',
+                          text: '📝 Enter Repository Manually'
+                        },
+                        action_id: 'manual_repo_entry'
+                      }
+                    ]
+                  }
+                ]
+              });
+            }
+
+            // Create repository selection dropdown
+            const repoOptions = userRepos.slice(0, 25).map((repo: string) => ({
+              text: {
+                type: 'plain_text',
+                text: repo.length > 75 ? repo.substring(0, 72) + '...' : repo
               },
-              {
-                type: 'input',
-                block_id: 'issue_title',
-                element: {
-                  type: 'plain_text_input',
-                  action_id: 'title',
-                  placeholder: {
-                    type: 'plain_text',
-                    text: 'Enter issue title...'
+              value: repo
+            }));
+
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: '📝 Create GitHub Issue',
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: '📝 *Create GitHub Issue*\n\nSelect a repository and provide issue details:'
                   }
                 },
-                label: {
-                  type: 'plain_text',
-                  text: 'Issue Title'
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `🔗 *Connected as:* Your GitHub account\n📁 *Available repositories:* ${userRepos.length} found`
+                  },
+                  accessory: {
+                    type: 'static_select',
+                    placeholder: {
+                      type: 'plain_text',
+                      text: 'Select repository...'
+                    },
+                    options: repoOptions,
+                    action_id: 'select_repository'
+                  }
+                },
+                {
+                  type: 'actions',
+                  elements: [
+                    {
+                      type: 'button',
+                      text: {
+                        type: 'plain_text',
+                        text: '📝 Continue with Issue Details'
+                      },
+                      action_id: 'show_issue_form',
+                      style: 'primary'
+                    },
+                    {
+                      type: 'button',
+                      text: {
+                        type: 'plain_text',
+                        text: '🔄 Refresh Repositories'
+                      },
+                      action_id: 'refresh_repos'
+                    }
+                  ]
                 }
-              }
-            ]
-          });
+              ]
+            });
+
+          } catch (error) {
+            console.error('Error in create-issue command:', error);
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: `❌ Error setting up issue creation: ${error instanceof Error ? error.message : 'Unknown error'}.\n\nPlease try again or contact administrator.`,
+            });
+          }
 
         case 'status':
           const statusChecks = {
