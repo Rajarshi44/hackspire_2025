@@ -8,6 +8,18 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Optimize for Vercel deployment
+  output: 'standalone',
+  
+  // Configure webpack for serverless functions
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Optimize bundle size for serverless functions
+      config.externals = [...config.externals, 'canvas', 'jsdom'];
+    }
+    return config;
+  },
+  
   images: {
     remotePatterns: [
       {
@@ -28,7 +40,18 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'avatars.githubusercontent.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
+  },
+
+  // API routes configuration for better performance
+  experimental: {
+    serverComponentsExternalPackages: ['genkit'],
   },
 };
 
