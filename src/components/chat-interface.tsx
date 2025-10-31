@@ -203,8 +203,8 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
       senderId: user.uid,
       avatarUrl: user.photoURL || '',
       text: text,
-      mentions: mentions.length > 0 ? mentions : undefined,
       isIssue: false,
+      ...(mentions.length > 0 && { mentions }),
     };
     
     const finalNewMessage = { ...newMessage, timestamp: serverTimestamp(), tempId: tempId };
@@ -277,7 +277,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
       
       const detectionResult = await aiDetectIssue({ 
         messages: recentMessages.map(m => ({ sender: m.sender, text: m.text })),
-        mentions: mentions.length > 0 ? mentions : undefined
+        ...(mentions.length > 0 && { mentions })
       });
       
       if (detectionResult.is_issue) {
@@ -292,7 +292,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
                   title: detectionResult.title,
                   description: detectionResult.description,
                   priority: detectionResult.priority,
-                  assignees: detectionResult.assignees,
+                  ...(detectionResult.assignees && detectionResult.assignees.length > 0 && { assignees: detectionResult.assignees }),
               },
               status: 'pending'
           };
@@ -329,7 +329,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
             issueTitle: message.issueDetails.title,
             issueDescription: message.issueDetails.description,
             accessToken: githubToken,
-            assignees: message.issueDetails.assignees,
+            ...(message.issueDetails.assignees && message.issueDetails.assignees.length > 0 && { assignees: message.issueDetails.assignees }),
         });
 
         const messageRef = doc(messagesRef, message.id);
