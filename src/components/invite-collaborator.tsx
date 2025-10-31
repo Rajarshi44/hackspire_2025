@@ -13,11 +13,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useFirestore, useMemoFirebase } from '@/firebase';
-import { doc, setDoc, serverTimestamp, getDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
 import { Loader2, UserPlus, Check, Github, PlusCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 type InviteCollaboratorDialogProps = {
   isOpen: boolean;
@@ -45,6 +55,8 @@ export function InviteCollaboratorDialog({
   const [collaborators, setCollaborators] = useState<GitHubCollaborator[]>([]);
   const [isFetchingCollaborators, setIsFetchingCollaborators] = useState(false);
   const [addedCollaborators, setAddedCollaborators] = useState<Set<string>>(new Set());
+  const [existingInvites, setExistingInvites] = useState<Array<{ id: string; email?: string; role?: string }>>([]);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const { toast } = useToast();
   const firestore = useFirestore();
   const { user, githubToken } = useAuth();
@@ -84,12 +96,16 @@ export function InviteCollaboratorDialog({
         const ghCollaborators = await ghResponse.json();
         setCollaborators(ghCollaborators);
 
-        const alreadyInvited = new Set<string>();
-        existingInvitesSnap.forEach(doc => {
-            // doc.id could be an email or a GitHub username (login)
-            alreadyInvited.add(doc.id);
-        });
-        setAddedCollaborators(alreadyInvited);
+    const alreadyInvited = new Set<string>();
+    const invites: Array<{ id: string; email?: string; role?: string }> = [];
+    existingInvitesSnap.forEach(d => {
+      // d.id could be an email or a GitHub username (login)
+      alreadyInvited.add(d.id);
+      const data = d.data() as any;
+      invites.push({ id: d.id, email: data?.email, role: data?.role });
+    });
+    setAddedCollaborators(alreadyInvited);
+    setExistingInvites(invites);
         
       } catch (error) {
         console.error('Error fetching collaborators:', error);
@@ -156,6 +172,10 @@ export function InviteCollaboratorDialog({
       }, { merge: true });
 
       setAddedCollaborators(prev => new Set(prev).add(collaboratorId));
+      setExistingInvites(prev => {
+        if (prev.find(p => p.id === collaboratorId)) return prev;
+        return [...prev, { id: collaboratorId, role: 'developer' }];
+      });
       toast({
         title: 'Collaborator Invited',
         description: `${collaborator.login} has been invited. They'll get access once they sign in to GitPulse.`,
@@ -170,6 +190,33 @@ export function InviteCollaboratorDialog({
     }
   };
 
+  const handleRemoveCollaborator = async (id: string) => {
+    if (!firestore) return;
+    try {
+      const collaboratorRef = doc(firestore, 'repos', encodedRepoFullName, 'collaborators', id);
+      await deleteDoc(collaboratorRef);
+      setAddedCollaborators(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      setExistingInvites(prev => prev.filter(inv => inv.id !== id));
+      toast({
+        title: 'Access removed',
+        description: `${id} no longer has access to ${repoFullName}.`,
+      });
+    } catch (e) {
+      console.error('Error removing collaborator:', e);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to remove collaborator.',
+      });
+    } finally {
+      setConfirmRemoveId(null);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -180,7 +227,7 @@ export function InviteCollaboratorDialog({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4 py-2">
+  <div className="space-y-4 py-2">
           <div className="flex gap-2">
             <Input
               id="email"
@@ -266,11 +313,66 @@ export function InviteCollaboratorDialog({
               <p className="text-center text-sm text-muted-foreground py-4">No other collaborators found on GitHub.</p>
             )}
           </div>
+
+          <div className="relative pt-2">
+            <div aria-hidden="true" className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Current access & invitations</span>
+            </div>
+          </div>
+
+          <div className="space-y-1 max-h-40 overflow-y-auto pr-2">
+            {existingInvites.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-3">No collaborators invited yet.</p>
+            ) : (
+              existingInvites.map(invite => (
+                <div key={invite.id} className="flex items-center justify-between p-2 rounded-md hover:bg-accent/50">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar className="h-7 w-7">
+                      <AvatarFallback>{invite.id.charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{invite.email || invite.id}</p>
+                      {invite.role && (
+                        <p className="text-xs text-muted-foreground">{invite.role}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-8"
+                      onClick={() => setConfirmRemoveId(invite.id)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
         <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>
+      <AlertDialog open={!!confirmRemoveId} onOpenChange={(open) => !open && setConfirmRemoveId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove collaborator?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will revoke access for {confirmRemoveId}. You can always invite them again later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmRemoveId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmRemoveId && handleRemoveCollaborator(confirmRemoveId)}>Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
