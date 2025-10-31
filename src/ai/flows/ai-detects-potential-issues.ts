@@ -17,6 +17,7 @@ const DetectIssueInputSchema = z.object({
       text: z.string().describe('The content of the message.'),
     })
   ).describe('The last 10 messages from the chat, including the new message.'),
+  mentions: z.array(z.string()).optional().describe('Array of GitHub usernames mentioned in the message with @ symbol.'),
 });
 export type DetectIssueInput = z.infer<typeof DetectIssueInputSchema>;
 
@@ -25,6 +26,7 @@ const DetectIssueOutputSchema = z.object({
   title: z.string().describe('A concise title for the detected issue.'),
   description: z.string().describe('A detailed description of the issue.'),
   priority: z.enum(['low', 'medium', 'high']).describe('The priority of the issue.'),
+  assignees: z.array(z.string()).optional().describe('Array of GitHub usernames to assign to the issue.'),
 });
 export type DetectIssueOutput = z.infer<typeof DetectIssueOutputSchema>;
 
@@ -47,12 +49,18 @@ const detectIssuePrompt = ai.definePrompt({
   {{sender}}: {{text}}
   {{/each}}
 
+  {{#if mentions}}
+  Mentioned users: {{mentions}}
+  If mentions are provided, these users should be assigned to the issue if it's detected.
+  {{/if}}
+
   Based on the last message, respond with a JSON object in the following format:
   {
   "is_issue": true or false,
   "title": "Concise title of the issue",
   "description": "Detailed description of the issue, including steps to reproduce if applicable",
-  "priority": "low", "medium", or "high"
+  "priority": "low", "medium", or "high",
+  "assignees": ["username1", "username2"] // Only include if mentions were provided and this is an issue
   }
 
   If the last message does not indicate an issue or feature request, set "is_issue" to false and leave the other fields empty.
