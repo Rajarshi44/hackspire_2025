@@ -32,12 +32,25 @@ export async function POST(req: NextRequest) {
       }, { status: 200 });
     }
 
-    if (!verifySlackRequest(body, signature, timestamp)) {
+    // Skip verification in development if bypass is enabled
+    const skipVerification = process.env.NODE_ENV === 'development' && process.env.SLACK_SKIP_VERIFICATION === 'true';
+    
+    if (!skipVerification && !verifySlackRequest(body, signature, timestamp)) {
       console.error('Slack signature verification failed');
+      
+      // Provide more detailed error in development
+      const errorDetail = process.env.NODE_ENV === 'development' 
+        ? ' Check your SLACK_SIGNING_SECRET and server logs for details.' 
+        : '';
+      
       return NextResponse.json({ 
         response_type: 'ephemeral',
-        text: '❌ Request verification failed.' 
+        text: `❌ Request verification failed.${errorDetail}` 
       }, { status: 200 });
+    }
+    
+    if (skipVerification) {
+      console.warn('⚠️ Slack signature verification SKIPPED (development mode)');
     }
 
     // Parse form data from Slack
