@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Bot, GitPullRequest, Github, UserPlus, ListTodo, GitPullRequestArrow } from 'lucide-react';
 
 const commands = [
-  { name: '/issue', description: 'Create a new GitHub issue.', icon: <Github className="w-4 h-4" /> },
+  { name: '/issue', description: 'Create a new GitHub issue. Use @username to assign.', icon: <Github className="w-4 h-4" /> },
   { name: '/issuelist', description: 'List open issues.', icon: <ListTodo className="w-4 h-4" /> },
   { name: '/prlist', description: 'List open pull requests.', icon: <GitPullRequestArrow className="w-4 h-4" /> },
   { name: '/collaborator', description: 'Invite a collaborator.', icon: <UserPlus className="w-4 h-4" /> },

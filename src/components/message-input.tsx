@@ -1,32 +1,34 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { SendHorizonal } from 'lucide-react';
 import { CommandPopover } from './command-popover';
+import { MentionInput } from './mention-input';
 
 type MessageInputProps = {
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, mentions?: string[]) => void;
   disabled?: boolean;
+  repoFullName: string;
 };
 
-export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
+export function MessageInput({ onSendMessage, disabled, repoFullName }: MessageInputProps) {
   const [text, setText] = useState('');
+  const [mentions, setMentions] = useState<string[]>([]);
   const [showCommandPopover, setShowCommandPopover] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = () => {
     if (text.trim()) {
-      onSendMessage(text);
+      onSendMessage(text, mentions);
       setText('');
+      setMentions([]);
       setShowCommandPopover(false);
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value;
+  const handleInputChange = (newText: string, newMentions: string[]) => {
     setText(newText);
+    setMentions(newMentions);
     
     // Only show popover if the user types '/' as the first character
     if (newText === '/') {
@@ -46,13 +48,14 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
   const handleCommandSelect = (command: string) => {
     // Replace the entire text with the selected command
     setText(command + ' ');
+    setMentions([]);
     setShowCommandPopover(false);
-    textareaRef.current?.focus();
   };
 
   useEffect(() => {
     if (disabled) {
         setText('');
+        setMentions([]);
     }
   }, [disabled]);
 
@@ -63,15 +66,15 @@ export function MessageInput({ onSendMessage, disabled }: MessageInputProps) {
         onOpenChange={setShowCommandPopover}
         onCommandSelect={handleCommandSelect}
       >
-        <Textarea
-            ref={textareaRef}
+        <MentionInput
             value={text}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Type a message or / for commands..."
+            placeholder="Type a message, / for commands, or @ to mention someone..."
             className="pr-20"
             rows={1}
             disabled={disabled}
+            repoFullName={repoFullName}
         />
       </CommandPopover>
       <Button

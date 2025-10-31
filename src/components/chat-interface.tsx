@@ -151,7 +151,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
     }
   }
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, mentions: string[] = []) => {
     if (!text.trim() || !user || !messagesRef) return;
 
     if (text.trim() === '/issuelist') {
@@ -169,6 +169,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
       senderId: user.uid,
       avatarUrl: user.photoURL || '',
       text: text,
+      mentions: mentions.length > 0 ? mentions : undefined,
       isIssue: false,
     };
     
@@ -189,7 +190,10 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
       const recentMessages = (serverMessages ?? []).slice(-9).map(m => ({ sender: m.sender, text: m.text }));
       recentMessages.push({ sender: newMessage.sender, text: newMessage.text });
       
-      const detectionResult = await aiDetectIssue({ messages: recentMessages });
+      const detectionResult = await aiDetectIssue({ 
+        messages: recentMessages,
+        mentions: mentions.length > 0 ? mentions : undefined
+      });
       
       if (detectionResult.is_issue) {
           const aiTempId = `temp_ai_${Date.now()}`;
@@ -197,12 +201,13 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
               sender: 'GitPulse AI',
               senderId: 'ai_assistant',
               avatarUrl: '/brain-circuit.svg',
-              text: `I've detected a potential issue: **${detectionResult.title}**`,
+              text: `I've detected a potential issue: **${detectionResult.title}**${detectionResult.assignees && detectionResult.assignees.length > 0 ? `\n\nSuggested assignees: ${detectionResult.assignees.map(a => `@${a}`).join(', ')}` : ''}`,
               isIssue: true,
               issueDetails: {
                   title: detectionResult.title,
                   description: detectionResult.description,
                   priority: detectionResult.priority,
+                  assignees: detectionResult.assignees,
               },
               status: 'pending'
           };
@@ -239,6 +244,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
             issueTitle: message.issueDetails.title,
             issueDescription: message.issueDetails.description,
             accessToken: githubToken,
+            assignees: message.issueDetails.assignees,
         });
 
         const messageRef = doc(messagesRef, message.id);
@@ -351,7 +357,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
             </div>
       </ScrollArea>
       <div className="p-4 border-t">
-        <MessageInput onSendMessage={handleSendMessage} disabled={isBotThinking} />
+        <MessageInput onSendMessage={handleSendMessage} disabled={isBotThinking} repoFullName={repoFullName} />
       </div>
     </div>
   );

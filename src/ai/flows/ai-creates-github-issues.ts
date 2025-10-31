@@ -17,6 +17,7 @@ const AICreateGithubIssueInputSchema = z.object({
   issueTitle: z.string().describe('The title of the GitHub issue.'),
   issueDescription: z.string().describe('The description of the GitHub issue.'),
   accessToken: z.string().describe('The GitHub access token for the user.'),
+  assignees: z.array(z.string()).optional().describe('Array of GitHub usernames to assign to the issue.'),
 });
 
 export type AICreateGithubIssueInput = z.infer<typeof AICreateGithubIssueInputSchema>;
@@ -45,6 +46,7 @@ const createGithubIssue = ai.defineTool(
       issueTitle,
       issueDescription,
       accessToken,
+      assignees,
     } = input;
 
     const githubApiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/issues`;
@@ -52,6 +54,7 @@ const createGithubIssue = ai.defineTool(
     const issueData = {
       title: issueTitle,
       body: `${issueDescription}\n\n---\n_Created by GitPulse AI_`,
+      ...(assignees && assignees.length > 0 && { assignees }),
     };
 
     const response = await fetch(githubApiUrl, {
@@ -92,13 +95,14 @@ const aiCreateGithubIssueFlow = ai.defineFlow(
     outputSchema: AICreateGithubIssueOutputSchema,
   },
   async input => {
-    const {repoOwner, repoName, issueTitle, issueDescription, accessToken} = input;
+    const {repoOwner, repoName, issueTitle, issueDescription, accessToken, assignees} = input;
     const {issueUrl} = await createGithubIssue({
         repoOwner,
         repoName,
         issueTitle,
         issueDescription,
-        accessToken
+        accessToken,
+        assignees
     });
     return {issueUrl};
   }
