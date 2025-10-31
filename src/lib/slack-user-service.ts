@@ -1,4 +1,5 @@
 import { getFirestore, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { initializeApp, getApps } from 'firebase/app';
 
 interface SlackUserData {
   slackUserId: string;
@@ -22,7 +23,38 @@ export class SlackUserService {
   private db: any;
 
   constructor() {
-    this.db = getFirestore();
+    this.initializeFirebase();
+  }
+
+  private initializeFirebase() {
+    try {
+      // Check if Firebase is already initialized
+      if (getApps().length === 0) {
+        // Initialize Firebase with config from environment variables
+        const firebaseConfig = {
+          apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+          authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+          messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+          appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+        };
+
+        console.log('🔥 Initializing Firebase for SlackUserService:', {
+          hasApiKey: !!firebaseConfig.apiKey,
+          hasProjectId: !!firebaseConfig.projectId,
+          projectId: firebaseConfig.projectId
+        });
+
+        initializeApp(firebaseConfig);
+      }
+      
+      this.db = getFirestore();
+      console.log('✅ Firebase initialized successfully for SlackUserService');
+    } catch (error) {
+      console.error('❌ Failed to initialize Firebase:', error);
+      throw new Error(`Firebase initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   /**
@@ -63,6 +95,11 @@ export class SlackUserService {
    */
   async getGitHubToken(slackUserId: string): Promise<string | null> {
     try {
+      if (!this.db) {
+        console.warn('⚠️ Firebase not initialized, cannot get GitHub token');
+        return null;
+      }
+      
       const userRef = doc(this.db, 'slack_users', slackUserId);
       const userDoc = await getDoc(userRef);
       
@@ -83,6 +120,10 @@ export class SlackUserService {
    */
   async hasGitHubAuth(slackUserId: string): Promise<boolean> {
     try {
+      if (!this.db) {
+        console.warn('⚠️ Firebase not initialized, assuming no GitHub auth');
+        return false;
+      }
       const token = await this.getGitHubToken(slackUserId);
       return !!token;
     } catch (error) {
@@ -175,6 +216,11 @@ export class SlackUserService {
    */
   async getUserRepositories(slackUserId: string): Promise<string[]> {
     try {
+      if (!this.db) {
+        console.warn('⚠️ Firebase not initialized, cannot get repositories');
+        return [];
+      }
+      
       const token = await this.getGitHubToken(slackUserId);
       
       if (!token) {
