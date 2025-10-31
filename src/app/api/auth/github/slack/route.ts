@@ -41,7 +41,6 @@ export async function GET(req: NextRequest) {
     const channelId = channel_id;
     
     // If we don't have a direct user_id (button URL), try to extract it from a provided `state` query
-    // This covers cases where callers pre-populate `state` with Slack info before redirecting here.
     let finalSlackUserId = slackUserId;
     let finalChannelId = channelId;
 
@@ -59,35 +58,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing user_id parameter' }, { status: 400 });
     }
 
-    // Build GitHub OAuth URL with correct redirect URI
-    // Prefer the request origin (works for Vercel previews / deployments). Fall back to env vars.
-    const origin = req.headers.get('origin') || req.headers.get('referer') || '';
-    const baseUrl = origin
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')
-      || process.env.NEXTAUTH_URL
-      || 'http://localhost:9002';
-
-    const redirectUri = `${baseUrl.replace(/\/$/, '')}/api/auth/github/slack`;
+    // ALWAYS use production URL for OAuth callback
+    // This ensures consistency with GitHub OAuth app registration
+    const redirectUri = 'https://devx-rho.vercel.app/api/auth/github/slack';
     
     console.log('🔗 GitHub OAuth redirect setup:', {
-      baseUrl,
       redirectUri,
-      vercelUrl: process.env.VERCEL_URL,
-      nextAuthUrl: process.env.NEXTAUTH_URL
+      clientId: process.env.GITHUB_CLIENT_ID
     });
 
     const githubOAuthUrl = new URL('https://github.com/login/oauth/authorize');
     githubOAuthUrl.searchParams.set('client_id', process.env.GITHUB_CLIENT_ID!);
-    // ensure redirect_uri is an absolute URL and URL-encoded by the URL API
     githubOAuthUrl.searchParams.set('redirect_uri', redirectUri);
-    githubOAuthUrl.searchParams.set('scope', 'repo,user:email'); // Permissions needed
+    githubOAuthUrl.searchParams.set('scope', 'repo,user:email');
 
-    // Build a defensively-encoded state payload. Always include slack ids we have.
+    // Build state payload with Slack user info
     const statePayload = {
       slack_user_id: finalSlackUserId,
       channel_id: finalChannelId,
       timestamp: Date.now(),
-    } as Record<string, any>;
+    };
 
     githubOAuthUrl.searchParams.set('state', JSON.stringify(statePayload));
 
@@ -151,7 +141,7 @@ export async function GET(req: NextRequest) {
         // Send a success message to the Slack channel or user
         try {
           const { slackAIService } = await import('@/lib/slack-ai-service');
-          const targetChannel = channelId || slackUserId; // Send to channel if available, otherwise DM
+          const targetChannel = channelId || slackUserId;
           
           await slackAIService.sendMessage(
             targetChannel,
@@ -176,7 +166,6 @@ export async function GET(req: NextRequest) {
           console.log('Success message sent to Slack');
         } catch (slackError) {
           console.error('Failed to send Slack message:', slackError);
-          // Don't fail the whole process if Slack message fails
         }
       } catch (storageError) {
         console.error('Failed to store GitHub auth:', storageError);
@@ -191,14 +180,56 @@ export async function GET(req: NextRequest) {
         <head>
           <title>GitHub Connected - GitPulse</title>
           <style>
-            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-            .success { color: #28a745; }
-            .container { max-width: 400px; margin: 0 auto; }
+            body { 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+              text-align: center; 
+              padding: 50px;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              margin: 0;
+              min-height: 100vh;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
+            .container { 
+              max-width: 400px;
+              background: white;
+              padding: 40px;
+              border-radius: 12px;
+              box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            }
+            .success { 
+              color: #28a745;
+              font-size: 48px;
+              margin: 0 0 20px 0;
+            }
+            h1 {
+              color: #333;
+              margin: 20px 0;
+            }
+            p {
+              color: #666;
+              line-height: 1.6;
+            }
+            .github-info {
+              background: #f6f8fa;
+              padding: 15px;
+              border-radius: 8px;
+              margin: 20px 0;
+            }
+            .github-info strong {
+              color: #333;
+            }
           </style>
         </head>
         <body>
           <div class="container">
-            <h1 class="success">✅ GitHub Connected!</h1>
+            <div class="success">✅</div>
+            <h1>GitHub Connected!</h1>
+            <div class="github-info">
+              <strong>${userData.login}</strong><br>
+              ${userData.email ? `📧 ${userData.email}` : ''}
+            </div>
             <p>Your GitHub account has been successfully connected to GitPulse.</p>
             <p>You can now close this window and return to Slack.</p>
             <script>
@@ -215,31 +246,22 @@ export async function GET(req: NextRequest) {
 
   } catch (error) {
     console.error('GitHub OAuth error:', error);
-    return NextResponse.json({ 
-      error: 'Failed to authenticate with GitHub',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    
+    return new Response(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>Connection Error</title></head>
+        <body style="font-family: Arial; text-align: center; padding: 50px;">
+          <h1>❌ Connection Error</h1>
+          <p>Failed to authenticate with GitHub</p>
+          <p style="color: #666; font-size: 14px;">${error instanceof Error ? error.message : 'Unknown error'}</p>
+          <p>Please try again from Slack.</p>
+          <script>setTimeout(() => window.close(), 5000);</script>
+        </body>
+      </html>
+    `, {
+      headers: { 'Content-Type': 'text/html' },
+      status: 500
+    });
   }
-}
-
-/**
- * Store user GitHub authentication data
- * TODO: Implement with Firestore
- */
-async function storeUserGitHubAuth(slackUserId: string, githubData: any) {
-  // This is a placeholder - implement with your Firestore setup
-  console.log('TODO: Store GitHub auth for Slack user', slackUserId, {
-    github_username: githubData.github_user.login,
-    has_token: !!githubData.access_token,
-  });
-  
-  // Example Firestore implementation:
-  /*
-  const db = getFirestore();
-  await db.collection('slack_users').doc(slackUserId).set({
-    github_token: githubData.access_token,
-    github_user: githubData.github_user,
-    connected_at: new Date(),
-  }, { merge: true });
-  */
 }
