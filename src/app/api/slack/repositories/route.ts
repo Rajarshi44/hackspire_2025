@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifySlackRequest, isUserAllowed, isChannelAllowed } from '@/lib/slack-utils';
 
 /**
  * Fetch user's GitHub repositories for Slack integration
@@ -9,6 +10,11 @@ export async function POST(req: NextRequest) {
 
     if (!slackUserId) {
       return NextResponse.json({ error: 'Slack user ID required' }, { status: 400 });
+    }
+
+    // Enforce allowlists
+    if (!isUserAllowed(slackUserId)) {
+      return NextResponse.json({ error: 'User not allowed' }, { status: 403 });
     }
 
     // Get user's GitHub token from Firestore

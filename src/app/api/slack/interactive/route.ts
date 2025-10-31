@@ -1,13 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac } from 'crypto';
-
-// Verify Slack request signature
-function verifySlackRequest(body: string, signature: string, timestamp: string) {
-  const signingSecret = process.env.SLACK_SIGNING_SECRET!;
-  const baseString = `v0:${timestamp}:${body}`;
-  const expectedSignature = `v0=${createHmac('sha256', signingSecret).update(baseString).digest('hex')}`;
-  return signature === expectedSignature;
-}
+import { verifySlackRequest, isUserAllowed, isChannelAllowed } from '@/lib/slack-utils';
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,6 +18,12 @@ export async function POST(req: NextRequest) {
     // Parse the payload from Slack
     const formData = new URLSearchParams(body);
     const payload = JSON.parse(formData.get('payload') || '{}');
+
+    // Enforce allowlists when configured
+    const slackUserId = payload.user?.id ?? payload.user_id ?? null;
+    const slackChannelId = payload.channel?.id ?? payload.channel_id ?? null;
+    if (!isUserAllowed(slackUserId)) return NextResponse.json({ error: 'User not allowed' }, { status: 403 });
+    if (!isChannelAllowed(slackChannelId)) return NextResponse.json({ error: 'Channel not allowed' }, { status: 403 });
 
     // Handle button interactions
     if (payload.type === 'block_actions') {

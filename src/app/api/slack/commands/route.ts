@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac } from 'crypto';
-
-// Verify Slack request signature
-function verifySlackRequest(body: string, signature: string, timestamp: string) {
-  const signingSecret = process.env.SLACK_SIGNING_SECRET!;
-  const baseString = `v0:${timestamp}:${body}`;
-  const expectedSignature = `v0=${createHmac('sha256', signingSecret).update(baseString).digest('hex')}`;
-  return signature === expectedSignature;
-}
+import { verifySlackRequest, isUserAllowed, isChannelAllowed } from '@/lib/slack-utils';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.text();
-    const signature = req.headers.get('x-slack-signature');
-    const timestamp = req.headers.get('x-slack-request-timestamp');
+  const signature = req.headers.get('x-slack-signature');
+  const timestamp = req.headers.get('x-slack-request-timestamp');
 
     if (!signature || !timestamp) {
       return NextResponse.json({ error: 'Missing Slack headers' }, { status: 400 });
@@ -29,6 +21,15 @@ export async function POST(req: NextRequest) {
     const text = formData.get('text');
     const userId = formData.get('user_id');
     const channelId = formData.get('channel_id');
+
+    // Enforce optional allowlists
+    if (!isUserAllowed(userId)) {
+      return NextResponse.json({ error: 'User not allowed' }, { status: 403 });
+    }
+
+    if (!isChannelAllowed(channelId)) {
+      return NextResponse.json({ error: 'Channel not allowed' }, { status: 403 });
+    }
 
     // Handle /gitpulse command
     if (command === '/gitpulse') {
