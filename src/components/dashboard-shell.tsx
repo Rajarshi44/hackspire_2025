@@ -10,12 +10,15 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
 } from '@/components/ui/sidebar';
 import { UserNav } from '@/components/user-nav';
 import { Logo } from '@/components/logo';
 import { RepoList } from '@/components/repo-list';
 import { Button } from './ui/button';
-import { Bell, UserPlus, ArrowLeft } from 'lucide-react';
+import { Bell, UserPlus, ArrowLeft, MessageSquare, Settings } from 'lucide-react';
 import { Separator } from './ui/separator';
 import { InviteCollaboratorDialog } from './invite-collaborator';
 import { useState } from 'react';
@@ -60,9 +63,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <SidebarContent className="p-0">
             <SidebarGroup>
                 <SidebarGroupLabel>Repositories</SidebarGroupLabel>
-                <div className="max-h-[70vh] overflow-y-auto">
+                <div className="max-h-[60vh] overflow-y-auto">
                     <RepoList />
                 </div>
+            </SidebarGroup>
+            <SidebarGroup>
+                <SidebarGroupLabel>Integrations</SidebarGroupLabel>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <Link href="/dashboard/slack">
+                        <MessageSquare className="h-4 w-4" />
+                        <span>Slack</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter>
