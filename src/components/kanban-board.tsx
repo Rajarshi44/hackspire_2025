@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Filter, X, ChevronRight, ClipboardList, Loader, CheckCircle } from "lucide-react";
+import { useAuth } from '@/lib/auth';
 
 // Data contracts
 export type Priority = "high" | "medium" | "low";
@@ -161,11 +162,130 @@ export function KanbanBoard({ repoFullName, aiIssues = [], className }: KanbanBo
 
   // Placeholder for GitHub sync (optional)
   async function syncWithGithub() {
-    // In a real implementation, fetch issues via GitHub API using repoFullName
-    // and merge them into the board state.
-    // This is a placeholder to demonstrate structure.
-    console.log("[Kanban] Sync placeholder for", repoFullName);
+    await fetchAndMergeGithubIssues();
   }
+
+  // Fetch issues from GitHub and merge into board state.
+  const { githubToken } = useAuth();
+
+  async function fetchGithubIssuesOnce(page = 1, per_page = 100) {
+    if (!repoFullName) return { issues: [], hasMore: false };
+    const [owner, repo] = repoFullName.split('/');
+    if (!owner || !repo) return { issues: [], hasMore: false };
+
+    const url = `https://api.github.com/repos/${owner}/${repo}/issues?state=all&per_page=${per_page}&page=${page}`;
+    const headers: Record<string, string> = { Accept: 'application/vnd.github.v3+json' };
+    if (githubToken) headers['Authorization'] = `Bearer ${githubToken}`;
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      console.warn('[Kanban] Failed to fetch issues from GitHub', res.status);
+      return { issues: [], hasMore: false };
+    }
+
+    const data = await res.json();
+    // GitHub returns pull requests in this endpoint as well (they include pull_request key). Filter those out.
+    const issues = Array.isArray(data) ? data.filter((i: any) => !i.pull_request) : [];
+
+    // simple pagination detection: if returned length === per_page, there might be more
+    const hasMore = Array.isArray(data) && data.length === per_page;
+    return { issues, hasMore };
+  }
+
+  async function fetchAndMergeGithubIssues() {
+    try {
+      let page = 1;
+      const per_page = 100;
+      const allFetched: any[] = [];
+      while (true) {
+        const { issues, hasMore } = await fetchGithubIssuesOnce(page, per_page);
+        if (!issues || issues.length === 0) break;
+        allFetched.push(...issues);
+        if (!hasMore) break;
+        page += 1;
+        // safety: avoid infinite loops
+        if (page > 5) break;
+      }
+
+      if (allFetched.length === 0) return;
+
+      // Merge into board: add new issues, update existing ones, move closed -> done
+      setBoard(prev => {
+        const next = { todo: [...(prev.todo ?? [])], in_progress: [...(prev.in_progress ?? [])], done: [...(prev.done ?? [])] } as Record<string, KanbanIssue[]>;
+
+        for (const gh of allFetched) {
+          const ghId = `gh-${gh.id}`;
+          // detect priority from labels (label names containing 'priority' or high/low)
+          let priority: Priority = 'medium';
+          if (gh.labels && Array.isArray(gh.labels)) {
+            const labelNames = gh.labels.map((l: any) => (l.name || '').toString().toLowerCase());
+            if (labelNames.some((n: string) => n.includes('high') || n.includes('priority: high'))) priority = 'high';
+            else if (labelNames.some((n: string) => n.includes('low') || n.includes('priority: low'))) priority = 'low';
+            else if (labelNames.some((n: string) => n.includes('in-progress') || n.includes('doing'))) {
+              // treat as in_progress
+            }
+          }
+
+          const mapped: KanbanIssue = {
+            id: ghId,
+            number: gh.number,
+            title: gh.title,
+            summary: clampSummary(gh.body || ''),
+            assignee: gh.assignee ? { name: gh.assignee.login, avatarUrl: gh.assignee.avatar_url } : null,
+            priority,
+            column: gh.state === 'closed' ? 'done' : 'todo',
+            source: 'github',
+          };
+
+          // If we have seen it before (either in any column), update/move
+          const existsIn = (col: string) => (next[col] ?? []).findIndex(i => i.id === ghId);
+          const idxTodo = existsIn('todo');
+          const idxProgress = existsIn('in_progress');
+          const idxDone = existsIn('done');
+
+          // remove from wherever it exists
+          if (idxTodo !== -1) next.todo.splice(idxTodo, 1);
+          if (idxProgress !== -1) next.in_progress.splice(idxProgress, 1);
+          if (idxDone !== -1) next.done.splice(idxDone, 1);
+
+          // push into appropriate column (closed -> done)
+          if (mapped.column === 'done') {
+            // push to top of done
+            next.done.unshift(mapped);
+          } else {
+            // if labels indicate in-progress, put there
+            const labelNames = (gh.labels || []).map((l: any) => (l.name || '').toString().toLowerCase());
+            if (labelNames.some((n: string) => n.includes('in-progress') || n.includes('doing') || n.includes('wip'))) {
+              mapped.column = 'in_progress';
+              next.in_progress.unshift(mapped);
+            } else {
+              next.todo.unshift(mapped);
+            }
+          }
+
+          // mark seen
+          seenIds.current.add(mapped.id);
+        }
+
+        return next;
+      });
+    } catch (e) {
+      console.error('[Kanban] Error fetching GitHub issues', e);
+    }
+  }
+
+  // Auto-sync on mount and when repoFullName or githubToken changes, and poll every 60s
+  useEffect(() => {
+    let mounted = true;
+    if (!repoFullName) return;
+    // run an initial sync
+    fetchAndMergeGithubIssues();
+    const iv = setInterval(() => {
+      if (!mounted) return;
+      fetchAndMergeGithubIssues();
+    }, 60_000);
+    return () => { mounted = false; clearInterval(iv); };
+  }, [repoFullName, githubToken]);
 
   // Column Renderer
   const Column: React.FC<{ id: keyof typeof board; title: string }> = ({ id, title }) => {
