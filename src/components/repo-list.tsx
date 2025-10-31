@@ -73,10 +73,10 @@ function RepoChannels({ repoFullName }: { repoFullName: string }) {
         <SidebarMenuSub>
             {channels?.map(channel => (
                 <SidebarMenuSubItem key={channel.id}>
-                    <Link href={`/dashboard/${encodedRepoFullName}/channels/${channel.id}`} legacyBehavior passHref>
+                    <Link href={`/dashboard/${repoFullName}/channels/${channel.id}`} legacyBehavior passHref>
                         <SidebarMenuSubButton 
                             as="a"
-                            isActive={pathname === `/dashboard/${encodedRepoFullName}/channels/${channel.id}`}
+                            isActive={pathname === `/dashboard/${repoFullName}/channels/${channel.id}`}
                             onClick={() => setOpenMobile(false)}
                         >
                             <Hash />
@@ -206,7 +206,7 @@ export function RepoList() {
     )
   }
 
-  const activeRepoFullName = decodeURIComponent(pathname.split('/')[2] || '');
+  const activeRepoFullName = pathname.split('/')[2] && pathname.split('/')[3] ? `${pathname.split('/')[2]}/${pathname.split('/')[3]}` : '';
 
   return (
     <>
@@ -217,7 +217,7 @@ export function RepoList() {
                 <div className="flex items-center">
                     <CollapsibleTrigger asChild>
                         <SidebarMenuButton
-                            isActive={activeRepoFullName === repo.full_name && !pathname.includes('/info')}
+                            isActive={decodeURIComponent(activeRepoFullName) === repo.full_name && !pathname.includes('/info')}
                             tooltip={repo.full_name}
                             className="w-full"
                             onClick={() => handleRepoClick(repo)}
