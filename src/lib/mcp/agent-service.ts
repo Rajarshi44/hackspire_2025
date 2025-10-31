@@ -15,8 +15,13 @@ import { selectRelatedFiles } from '@/lib/mcp/file-selector';
 import { chunkFileContent } from '@/lib/mcp/file-chunker';
 import { validateGeneratedCode } from '@/lib/mcp/code-validator';
 import { aiGeneratesCodeDiff } from '@/ai/flows/ai-generates-code-diff';
-import { getFirestore, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { initializeFirebase } from '@/firebase';
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+} from '@/lib/server-firestore';
 
 // ============================================================================
 // Configuration
@@ -36,8 +41,7 @@ if (!GITHUB_TOKEN) {
  * Get Firestore instance
  */
 function getFirestoreInstance() {
-  const { firestore } = initializeFirebase();
-  return firestore;
+  return getFirestore();
 }
 
 /**
