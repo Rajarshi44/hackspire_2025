@@ -21,18 +21,22 @@ type CommandPopoverProps = {
 };
 
 export function CommandPopover({ children, open, onOpenChange, onCommandSelect }: CommandPopoverProps) {
+  console.log('CommandPopover render - open:', open); // Debug log
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-80 p-1" align="start">
+      <PopoverContent className="w-80 p-1" align="start" side="top">
         <div className="p-2 text-sm font-semibold">Commands</div>
         <div className="flex flex-col">
-          {commands.map((command) => (
+          {commands.map((command, index) => (
             <button
               key={command.name}
-              onClick={() => onCommandSelect(command.name)}
-              className="flex items-center gap-2 p-2 rounded-md text-left hover:bg-accent"
+              onClick={() => {
+                console.log('Command selected:', command.name); // Debug log
+                onCommandSelect(command.name);
+              }}
+              className="flex items-center gap-2 p-2 rounded-md text-left hover:bg-accent transition-colors"
             >
               <div className="p-1.5 bg-secondary rounded-md">{command.icon}</div>
               <div>

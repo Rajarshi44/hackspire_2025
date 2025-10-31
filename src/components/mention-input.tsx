@@ -14,6 +14,7 @@ type MentionInputProps = {
   repoFullName: string;
   className?: string;
   rows?: number;
+  showCommandSuggestions?: boolean;
 };
 
 type MentionSuggestion = {
@@ -31,12 +32,33 @@ export function MentionInput({
   repoFullName,
   className,
   rows = 1,
+  showCommandSuggestions = false,
 }: MentionInputProps) {
   const [suggestions, setSuggestions] = useState<MentionSuggestion[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { collaborators } = useCollaborators(repoFullName);
+  const { collaborators: fetchedCollaborators, isLoading, error } = useCollaborators(repoFullName);
+  
+  // Add test collaborators if none are fetched (for debugging)
+  const collaborators = fetchedCollaborators.length > 0 ? fetchedCollaborators : [
+    { id: 'test1', name: 'testuser1', username: 'testuser1', role: 'test' },
+    { id: 'test2', name: 'testuser2', username: 'testuser2', role: 'test' },
+    { id: 'john', name: 'john', username: 'john', role: 'test' },
+    { id: 'sarah', name: 'sarah', username: 'sarah', role: 'test' },
+  ];
+  
+  console.log('MentionInput render:', { 
+    value, 
+    repoFullName, 
+    collaborators: collaborators.length, 
+    fetchedCollaborators: fetchedCollaborators.length,
+    showCommandSuggestions,
+    showSuggestions,
+    suggestions: suggestions.length,
+    isLoading,
+    error
+  });
 
   const extractMentions = useCallback((text: string): string[] => {
     const mentionRegex = /@(\w+)/g;
@@ -67,8 +89,16 @@ export function MentionInput({
     };
   }, []);
 
-  const updateSuggestions = useCallback(() => {
-    if (!textareaRef.current || !collaborators.length) {
+  const updateSuggestions = () => {
+    console.log('updateSuggestions called:', { 
+      hasTextarea: !!textareaRef.current, 
+      collaboratorsCount: collaborators.length, 
+      showCommandSuggestions,
+      value 
+    });
+    
+    if (!textareaRef.current || !collaborators.length || showCommandSuggestions) {
+      console.log('Early return from updateSuggestions');
       setSuggestions([]);
       setShowSuggestions(false);
       return;
@@ -76,8 +106,11 @@ export function MentionInput({
 
     const cursorPosition = textareaRef.current.selectionStart;
     const mentionInfo = findMentionQuery(value, cursorPosition);
+    
+    console.log('Mention info:', mentionInfo, 'cursor:', cursorPosition);
 
     if (!mentionInfo) {
+      console.log('No mention info found');
       setSuggestions([]);
       setShowSuggestions(false);
       return;
@@ -89,30 +122,40 @@ export function MentionInput({
       collab.name.toLowerCase().includes(query.toLowerCase())
     );
 
+    console.log('Filtered collaborators:', filteredCollaborators.length, 'for query:', query);
+
     if (filteredCollaborators.length > 0) {
-      setSuggestions(
-        filteredCollaborators.map(collaborator => ({
-          collaborator,
-          startIndex,
-          query,
-        }))
-      );
+      const newSuggestions = filteredCollaborators.map(collaborator => ({
+        collaborator,
+        startIndex,
+        query,
+      }));
+      
+      console.log('Setting suggestions:', newSuggestions.length);
+      setSuggestions(newSuggestions);
       setShowSuggestions(true);
       setSelectedSuggestionIndex(0);
     } else {
+      console.log('No filtered collaborators found');
       setSuggestions([]);
       setShowSuggestions(false);
     }
-  }, [value, collaborators, findMentionQuery]);
+  };
 
   useEffect(() => {
     updateSuggestions();
-  }, [updateSuggestions]);
+  }, [value, collaborators.length, showCommandSuggestions]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     const mentions = extractMentions(newValue);
+    console.log('MentionInput handleInputChange:', { newValue, mentions });
     onChange(newValue, mentions);
+    
+    // Update suggestions after a short delay to avoid re-render issues
+    setTimeout(() => {
+      updateSuggestions();
+    }, 0);
   };
 
   const insertMention = (collaborator: Collaborator) => {
@@ -145,7 +188,8 @@ export function MentionInput({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (showSuggestions && suggestions.length > 0) {
+    // Only handle mention suggestions if command suggestions are not showing
+    if (!showCommandSuggestions && showSuggestions && suggestions.length > 0) {
       switch (event.key) {
         case 'ArrowDown':
           event.preventDefault();
@@ -188,7 +232,7 @@ export function MentionInput({
         disabled={disabled}
       />
       
-      {showSuggestions && suggestions.length > 0 && (
+      {!showCommandSuggestions && showSuggestions && suggestions.length > 0 && (
         <div className="absolute bottom-full left-0 right-0 mb-1 bg-popover border rounded-md shadow-md z-50 max-h-48 overflow-y-auto">
           {suggestions.map((suggestion, index) => (
             <div
