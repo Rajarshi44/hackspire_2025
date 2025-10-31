@@ -19,16 +19,19 @@ export async function POST(req: NextRequest) {
 
     const data = JSON.parse(body);
 
+    // Handle URL verification challenge (respond with raw challenge string as text/plain)
+    if (data.type === 'url_verification') {
+      return new NextResponse(data.challenge, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
+
     // Enforce allowlists (best-effort - event payload shapes vary)
     const eventUser = data.event?.user ?? data.event?.bot_user_id ?? null;
     const eventChannel = data.event?.channel ?? null;
     if (!isUserAllowed(eventUser)) return NextResponse.json({ error: 'User not allowed' }, { status: 403 });
     if (!isChannelAllowed(eventChannel)) return NextResponse.json({ error: 'Channel not allowed' }, { status: 403 });
-
-    // Handle URL verification challenge
-    if (data.type === 'url_verification') {
-      return NextResponse.json({ challenge: data.challenge });
-    }
 
     // Handle app mention events
     if (data.type === 'event_callback' && data.event.type === 'app_mention') {
