@@ -1,4 +1,9 @@
 node_modules
 .next
 
+# Environment files - ignore any .env files so secrets don't get committed
 .env
+.env.*
+.env.local
+*.env
+env
