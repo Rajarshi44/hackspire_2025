@@ -46,11 +46,22 @@ export function verifySlackRequest(body: string, signature: string | null, times
   const baseString = `v0:${timestamp}:${body}`;
   const expected = `v0=${createHmac('sha256', signingSecret).update(baseString).digest('hex')}`;
 
+  console.log('🔐 Signature calculation details:', {
+    signingSecretLength: signingSecret.length,
+    signingSecretPrefix: signingSecret.substring(0, 8) + '...',
+    timestampValue: timestamp,
+    bodyLength: body.length,
+    bodyHash: createHmac('sha256', 'test').update(body).digest('hex').substring(0, 8) + '...',
+    baseStringLength: baseString.length,
+    baseStringPrefix: baseString.substring(0, 50) + '...'
+  });
+
   console.log('Signature comparison:', {
     expectedLength: expected.length,
     receivedLength: signature.length,
-    expectedPrefix: expected.substring(0, 10),
-    receivedPrefix: signature.substring(0, 10)
+    expectedFull: expected,
+    receivedFull: signature,
+    match: expected === signature
   });
 
   try {

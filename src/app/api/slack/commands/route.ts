@@ -2,17 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifySlackRequest, isUserAllowed, isChannelAllowed } from '@/lib/slack-utils';
 
 export async function POST(req: NextRequest) {
-  console.log('Slack command received at:', new Date().toISOString());
+  console.log('🚀 Slack command received at:', new Date().toISOString());
   
   try {
+    // Clone the request to avoid consuming the body twice
+    const clonedReq = req.clone();
     const body = await req.text();
-    const signature = req.headers.get('x-slack-signature');
-    const timestamp = req.headers.get('x-slack-request-timestamp');
+    const signature = clonedReq.headers.get('x-slack-signature');
+    const timestamp = clonedReq.headers.get('x-slack-request-timestamp');
 
-    console.log('Request details:', { 
-      hasSignature: !!signature, 
-      hasTimestamp: !!timestamp, 
-      bodyLength: body.length 
+    console.log('📋 Raw request details:', { 
+      method: clonedReq.method,
+      url: clonedReq.url,
+      bodyLength: body.length,
+      bodyPreview: body.substring(0, 200),
+      contentType: clonedReq.headers.get('content-type'),
+      signature: signature,
+      timestamp: timestamp
     });
 
     // Check for missing environment variables early
@@ -32,25 +38,42 @@ export async function POST(req: NextRequest) {
       }, { status: 200 });
     }
 
-    // Skip verification in development if bypass is enabled
-    const skipVerification = process.env.NODE_ENV === 'development' && process.env.SLACK_SKIP_VERIFICATION === 'true';
+    // Temporary aggressive debugging mode
+    const skipVerification = process.env.NODE_ENV === 'development' || process.env.SLACK_SKIP_VERIFICATION === 'true';
     
-    if (!skipVerification && !verifySlackRequest(body, signature, timestamp)) {
-      console.error('Slack signature verification failed');
+    console.log('🔐 Verification settings:', {
+      nodeEnv: process.env.NODE_ENV,
+      skipVerificationEnv: process.env.SLACK_SKIP_VERIFICATION,
+      willSkip: skipVerification,
+      hasSigningSecret: !!process.env.SLACK_SIGNING_SECRET,
+      signingSecretLength: process.env.SLACK_SIGNING_SECRET?.length
+    });
+    
+    if (!skipVerification) {
+      const verificationResult = verifySlackRequest(body, signature, timestamp);
+      console.log('🔍 Verification result:', verificationResult);
       
-      // Provide more detailed error in development
-      const errorDetail = process.env.NODE_ENV === 'development' 
-        ? ' Check your SLACK_SIGNING_SECRET and server logs for details.' 
-        : '';
-      
-      return NextResponse.json({ 
-        response_type: 'ephemeral',
-        text: `❌ Request verification failed.${errorDetail}` 
-      }, { status: 200 });
+      if (!verificationResult) {
+        console.error('❌ Slack signature verification failed');
+        
+        // Return detailed debug info in development
+        const debugInfo = process.env.NODE_ENV === 'development' ? {
+          timestamp: new Date().toISOString(),
+          hasSignature: !!signature,
+          hasTimestamp: !!timestamp,
+          signingSecretSet: !!process.env.SLACK_SIGNING_SECRET,
+          bodyLength: body.length
+        } : {};
+        
+        return NextResponse.json({ 
+          response_type: 'ephemeral',
+          text: `❌ Request verification failed. Debug info: ${JSON.stringify(debugInfo)}` 
+        }, { status: 200 });
+      }
     }
     
     if (skipVerification) {
-      console.warn('⚠️ Slack signature verification SKIPPED (development mode)');
+      console.warn('⚠️ Slack signature verification SKIPPED');
     }
 
     // Parse form data from Slack
