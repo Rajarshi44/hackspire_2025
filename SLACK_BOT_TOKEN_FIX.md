@@ -22,12 +22,12 @@ Your Slack bot is failing with `invalid_auth` error because:
 
 4. **Copy the "Bot User OAuth Token"** - It should look like:
    ```
-   xoxb-1234567890123-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx
+   xoxb-[numbers]-[numbers]-[letters]
    ```
 
 5. **Update your environment variables:**
    ```bash
-   SLACK_BOT_TOKEN=xoxb-1234567890123-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx
+   SLACK_BOT_TOKEN=xoxb-[your-actual-bot-token-here]
    ```
 
 ### Step 2: Verify OAuth Scopes
@@ -72,12 +72,12 @@ Or manually add it:
 
 ```bash
 # Slack Configuration (CRITICAL)
-SLACK_BOT_TOKEN=xoxb-your-actual-bot-token-here
-SLACK_SIGNING_SECRET=your-signing-secret-here
+SLACK_BOT_TOKEN=xoxb-[your-bot-token-from-slack-app]
+SLACK_SIGNING_SECRET=[your-signing-secret-from-slack-app]
 
 # Other required variables
 SLACK_SKIP_VERIFICATION=true  # Only for testing, remove in production
-GOOGLE_GENAI_API_KEY=your-genai-key
+GOOGLE_GENAI_API_KEY=[your-genai-api-key]
 ```
 
 **In Vercel Dashboard:**
