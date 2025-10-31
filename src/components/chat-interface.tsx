@@ -8,8 +8,10 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { ChatMessage, type Message } from '@/components/chat-message';
 import { MessageInput } from '@/components/message-input';
 import { aiDetectIssue } from '@/ai/flows/ai-detects-potential-issues';
+import { aiDetectIssueResolution } from '@/ai/flows/ai-detects-issue-resolution';
+import { aiMatchPullRequestWithIssue } from '@/ai/flows/ai-matches-pr-with-issue';
 import { Button } from './ui/button';
-import { Github, Sparkles, ExternalLink, GitPullRequest, ListTodo } from 'lucide-react';
+import { Github, Sparkles, ExternalLink, GitPullRequest, ListTodo, CheckCircle, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { aiCreateGithubIssue } from '@/ai/flows/ai-creates-github-issues';
 import { aiListGithubIssues } from '@/ai/flows/ai-list-github-issues';
@@ -80,7 +82,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
     }
   }, [messages]);
 
-  const sendBotMessage = async (text: string, type: 'issue-list' | 'pr-list', data: any[]) => {
+  const sendBotMessage = async (text: string, type: 'issue-list' | 'pr-list' | 'pr-verification', data: any[]) => {
     if (!messagesRef) return;
     const tempId = `temp_${Date.now()}`;
     const botMessage: Omit<Message, 'id' | 'timestamp'> = {
@@ -151,6 +153,33 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
     }
   }
 
+  const handleManualPRVerification = async (issueRef: string) => {
+    if (!githubToken || !user) return;
+    setIsBotThinking(true);
+    
+    try {
+      const [repoOwner, repoName] = repoFullName.split('/');
+      const matchResult = await aiMatchPullRequestWithIssue({
+        repoOwner,
+        repoName,
+        issueReference: issueRef,
+        claimedBy: user.displayName || user.uid,
+        accessToken: githubToken,
+      });
+
+      const text = matchResult.matchFound 
+        ? `✅ **PR Verification**: Found ${matchResult.matchingPRs.length} matching pull request${matchResult.matchingPRs.length > 1 ? 's' : ''} for "${issueRef}"` 
+        : `❌ **PR Verification**: No matching pull requests found for "${issueRef}".`;
+        
+      await sendBotMessage(text, 'pr-verification', matchResult.matchingPRs);
+    } catch(e) {
+      console.error(e);
+      await sendBotMessage('Sorry, I was unable to verify pull requests.', 'pr-verification', []);
+    } finally {
+      setIsBotThinking(false);
+    }
+  }
+
   const handleSendMessage = async (text: string, mentions: string[] = []) => {
     if (!text.trim() || !user || !messagesRef) return;
 
@@ -160,6 +189,11 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
     }
     if (text.trim() === '/prlist') {
       await handleListPRs();
+      return;
+    }
+    if (text.trim().startsWith('/solved')) {
+      const issueRef = text.trim().replace('/solved', '').trim() || 'recent issue';
+      await handleManualPRVerification(issueRef);
       return;
     }
 
@@ -187,11 +221,62 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
     try {
       const newDocRef = await addDoc(messagesRef, finalNewMessage);
       
-      const recentMessages = (serverMessages ?? []).slice(-9).map(m => ({ sender: m.sender, text: m.text }));
-      recentMessages.push({ sender: newMessage.sender, text: newMessage.text });
+      const recentMessages = (serverMessages ?? []).slice(-9).map(m => ({ 
+        sender: m.sender, 
+        text: m.text,
+        senderId: m.senderId 
+      }));
+      recentMessages.push({ 
+        sender: newMessage.sender, 
+        text: newMessage.text, 
+        senderId: newMessage.senderId 
+      });
+      
+      // Check for issue resolution claims
+      const resolutionResult = await aiDetectIssueResolution({
+        messages: recentMessages,
+        currentUserId: user.uid,
+      });
+
+      if (resolutionResult.isResolutionClaim && resolutionResult.issueReference && githubToken) {
+        // User claims to have resolved an issue - check for matching PRs
+        const [repoOwner, repoName] = repoFullName.split('/');
+        const matchResult = await aiMatchPullRequestWithIssue({
+          repoOwner,
+          repoName,
+          issueReference: resolutionResult.issueReference,
+          claimedBy: user.displayName || user.uid,
+          accessToken: githubToken,
+        });
+
+        // Send AI response about PR verification
+        const verificationTempId = `temp_verification_${Date.now()}`;
+        const verificationMessage: Omit<Message, 'id' | 'timestamp'> = {
+          sender: 'GitPulse AI',
+          senderId: 'ai_assistant',
+          avatarUrl: '/brain-circuit.svg',
+          text: matchResult.matchFound 
+            ? `✅ **PR Verification**: I found ${matchResult.matchingPRs.length} matching pull request${matchResult.matchingPRs.length > 1 ? 's' : ''} for "${resolutionResult.issueReference}"` 
+            : `❌ **PR Verification**: No matching pull requests found for "${resolutionResult.issueReference}". ${resolutionResult.resolutionMethod === 'pull_request' ? 'You mentioned creating a PR - it might not be visible yet or may need different keywords.' : ''}`,
+          isSystemMessage: true,
+          systemMessageType: 'pr-verification',
+          systemMessageData: matchResult.matchingPRs,
+        };
+
+        const finalVerificationMessage = { ...verificationMessage, timestamp: serverTimestamp(), tempId: verificationTempId };
+        const tempOptimisticVerificationMessage: Message = {
+          ...verificationMessage,
+          id: verificationTempId,
+          timestamp: { seconds: Date.now() / 1000 + 2, nanoseconds: 0 },
+          tempId: verificationTempId,
+        };
+
+        setOptimisticMessages(prev => [...prev, tempOptimisticVerificationMessage]);
+        await addDoc(messagesRef, finalVerificationMessage);
+      }
       
       const detectionResult = await aiDetectIssue({ 
-        messages: recentMessages,
+        messages: recentMessages.map(m => ({ sender: m.sender, text: m.text })),
         mentions: mentions.length > 0 ? mentions : undefined
       });
       
@@ -302,6 +387,54 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
         </div>
       )
     }
+    
+    if (msg.systemMessageType === 'pr-verification') {
+      const matchingPRs = msg.systemMessageData || [];
+      return (
+        <div className='ml-12 mt-2 space-y-2'>
+          {matchingPRs.length > 0 ? (
+            matchingPRs.map((pr: any) => (
+              <Link href={pr.url} key={pr.number} target="_blank">
+                <div className='flex items-center gap-3 p-2 rounded-md border bg-card hover:bg-accent/50 transition-colors'>
+                  <div className='flex items-center gap-2'>
+                    <GitPullRequest className='h-5 w-5 text-green-600' />
+                    {pr.matchConfidence === 'high' && <CheckCircle className='h-4 w-4 text-green-600' />}
+                    {pr.matchConfidence === 'medium' && <CheckCircle className='h-4 w-4 text-yellow-600' />}
+                    {pr.matchConfidence === 'low' && <AlertCircle className='h-4 w-4 text-orange-600' />}
+                  </div>
+                  <div className='flex-1'>
+                    <div className='flex items-center gap-2'>
+                      <span className='font-medium'>#{pr.number} {pr.title}</span>
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                        pr.matchConfidence === 'high' ? 'bg-green-100 text-green-800' :
+                        pr.matchConfidence === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-orange-100 text-orange-800'
+                      }`}>
+                        {pr.matchConfidence} confidence
+                      </span>
+                    </div>
+                    <p className='text-xs text-muted-foreground'>
+                      By {pr.author} • {pr.matchReason}
+                    </p>
+                  </div>
+                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className='flex items-center gap-3 p-2 rounded-md border bg-muted/50'>
+              <AlertCircle className='h-5 w-5 text-muted-foreground' />
+              <div className='flex-1'>
+                <span className='text-sm text-muted-foreground'>
+                  No matching pull requests found. The PR might be in a different repository or use different keywords.
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+    
     return null;
   }
 

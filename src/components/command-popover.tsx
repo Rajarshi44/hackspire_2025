@@ -8,6 +8,7 @@ const commands = [
   { name: '/issue', description: 'Create a new GitHub issue. Use @username to assign.', icon: <Github className="w-4 h-4" /> },
   { name: '/issuelist', description: 'List open issues.', icon: <ListTodo className="w-4 h-4" /> },
   { name: '/prlist', description: 'List open pull requests.', icon: <GitPullRequestArrow className="w-4 h-4" /> },
+  { name: '/solved', description: 'Mark an issue as solved and verify PRs.', icon: <GitPullRequest className="w-4 h-4" /> },
   { name: '/collaborator', description: 'Invite a collaborator.', icon: <UserPlus className="w-4 h-4" /> },
   { name: '/ask', description: 'Ask the AI a question.', icon: <Bot className="w-4 h-4" /> },
 ];
