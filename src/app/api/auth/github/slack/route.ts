@@ -9,13 +9,54 @@ export async function GET(req: NextRequest) {
   const code = searchParams.get('code');
   const state = searchParams.get('state');
   const error = searchParams.get('error');
+  const user_id = searchParams.get('user_id'); // Direct from button URL
+  const channel_id = searchParams.get('channel_id'); // Direct from button URL
+
+  console.log('GitHub OAuth callback:', { 
+    hasCode: !!code, 
+    hasState: !!state, 
+    error, 
+    user_id, 
+    channel_id 
+  });
 
   if (error) {
-    return NextResponse.json({ error: 'GitHub OAuth failed' }, { status: 400 });
+    return new Response(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>GitHub Connection Failed</title></head>
+        <body style="font-family: Arial; text-align: center; padding: 50px;">
+          <h1>❌ GitHub Connection Failed</h1>
+          <p>Error: ${error}</p>
+          <p>Please try again from Slack.</p>
+          <script>setTimeout(() => window.close(), 5000);</script>
+        </body>
+      </html>
+    `, { headers: { 'Content-Type': 'text/html' } });
   }
 
+  // If no code, redirect to GitHub OAuth
   if (!code) {
-    return NextResponse.json({ error: 'No authorization code provided' }, { status: 400 });
+    const slackUserId = user_id;
+    const channelId = channel_id;
+    
+    if (!slackUserId) {
+      return NextResponse.json({ error: 'Missing user_id parameter' }, { status: 400 });
+    }
+
+    // Build GitHub OAuth URL
+    const githubOAuthUrl = new URL('https://github.com/login/oauth/authorize');
+    githubOAuthUrl.searchParams.set('client_id', process.env.GITHUB_CLIENT_ID!);
+    githubOAuthUrl.searchParams.set('redirect_uri', `${process.env.NEXTAUTH_URL || 'http://localhost:9002'}/api/auth/github/slack`);
+    githubOAuthUrl.searchParams.set('scope', 'repo,user:email'); // Permissions needed
+    githubOAuthUrl.searchParams.set('state', JSON.stringify({ 
+      slack_user_id: slackUserId,
+      channel_id: channelId,
+      timestamp: Date.now()
+    }));
+
+    console.log('Redirecting to GitHub OAuth:', githubOAuthUrl.toString());
+    return NextResponse.redirect(githubOAuthUrl.toString());
   }
 
   try {
@@ -49,24 +90,62 @@ export async function GET(req: NextRequest) {
 
     const userData = await userResponse.json();
 
-    // Parse state to get Slack user info (you can encode this in the initial OAuth URL)
-    const stateData = state ? JSON.parse(decodeURIComponent(state)) : {};
-    const slackUserId = stateData.slack_user_id;
+    // Parse state to get Slack user info
+    const stateData = state ? JSON.parse(state) : {};
+    const slackUserId = stateData.slack_user_id || user_id;
+    const channelId = stateData.channel_id || channel_id;
+
+    console.log('Processing GitHub OAuth success:', { 
+      slackUserId, 
+      channelId, 
+      githubUsername: userData.login 
+    });
 
     if (slackUserId) {
-      // Store the GitHub token and user info in Firestore
-      const { slackUserService } = await import('@/lib/slack-user-service');
-      await slackUserService.storeGitHubAuth(slackUserId, {
-        access_token: tokenData.access_token,
-        github_user: userData,
-      });
+      try {
+        // Store the GitHub token and user info in Firestore
+        const { slackUserService } = await import('@/lib/slack-user-service');
+        await slackUserService.storeGitHubAuth(slackUserId, {
+          access_token: tokenData.access_token,
+          github_user: userData,
+        });
 
-      // Send a success message to the Slack user
-      const { slackAIService } = await import('@/lib/slack-ai-service-enhanced');
-      await slackAIService.sendMessage(
-        slackUserId, // DM the user
-        `✅ GitHub connected successfully!\n\nYour GitHub account **${userData.login}** is now linked. I can now help you create issues in your repositories automatically!`
-      );
+        console.log('GitHub auth stored successfully for user:', slackUserId);
+
+        // Send a success message to the Slack channel or user
+        try {
+          const { slackAIService } = await import('@/lib/slack-ai-service');
+          const targetChannel = channelId || slackUserId; // Send to channel if available, otherwise DM
+          
+          await slackAIService.sendMessage(
+            targetChannel,
+            '',
+            [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `✅ *GitHub Connected Successfully!*\n\n🔗 **Account:** ${userData.login}\n📧 **Email:** ${userData.email || 'Not provided'}\n📁 **Public Repos:** ${userData.public_repos || 0}`
+                }
+              },
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn', 
+                  text: '🎉 You can now create GitHub issues directly from Slack!\n\nTry: `/gitpulse create-issue`'
+                }
+              }
+            ]
+          );
+          console.log('Success message sent to Slack');
+        } catch (slackError) {
+          console.error('Failed to send Slack message:', slackError);
+          // Don't fail the whole process if Slack message fails
+        }
+      } catch (storageError) {
+        console.error('Failed to store GitHub auth:', storageError);
+        throw storageError;
+      }
     }
 
     // Return a success page

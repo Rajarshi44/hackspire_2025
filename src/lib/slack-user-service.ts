@@ -171,6 +171,46 @@ export class SlackUserService {
   }
 
   /**
+   * Get user's GitHub repositories
+   */
+  async getUserRepositories(slackUserId: string): Promise<string[]> {
+    try {
+      const token = await this.getGitHubToken(slackUserId);
+      
+      if (!token) {
+        console.log('No GitHub token found for user:', slackUserId);
+        return [];
+      }
+
+      // Fetch repositories from GitHub API
+      const response = await fetch('https://api.github.com/user/repos?per_page=50&sort=updated&type=owner', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'GitPulse-Bot/1.0'
+        },
+      });
+
+      if (!response.ok) {
+        console.error('Failed to fetch repositories from GitHub:', response.status, response.statusText);
+        return [];
+      }
+
+      const repos = await response.json();
+      const repoNames = repos
+        .filter((repo: any) => !repo.fork && !repo.archived) // Only own, active repos
+        .map((repo: any) => repo.full_name)
+        .slice(0, 25); // Limit to 25 most recent
+
+      console.log('Fetched repositories for user:', slackUserId, repoNames.length);
+      return repoNames;
+    } catch (error) {
+      console.error('Error fetching user repositories:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get users with auto-suggestions enabled for a channel
    */
   async getActiveUsersInChannel(channelId: string): Promise<SlackUserData[]> {

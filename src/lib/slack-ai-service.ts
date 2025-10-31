@@ -25,6 +25,13 @@ export class SlackAIService {
    * Fetch recent messages from a Slack channel
    */
   async getChannelHistory(channelId: string, limit: number = 10): Promise<SlackMessage[]> {
+    console.log('🔍 Fetching channel history:', { 
+      channelId, 
+      limit,
+      hasToken: !!this.botToken,
+      tokenPrefix: this.botToken ? this.botToken.substring(0, 10) + '...' : 'none'
+    });
+
     const response = await fetch(`https://slack.com/api/conversations.history`, {
       method: 'POST',
       headers: {
@@ -39,8 +46,31 @@ export class SlackAIService {
 
     const data = await response.json();
     
+    console.log('📄 Slack API response:', {
+      ok: data.ok,
+      error: data.error,
+      messageCount: data.messages?.length || 0,
+      hasMessages: !!data.messages
+    });
+    
     if (!data.ok) {
-      throw new Error(`Failed to fetch channel history: ${data.error}`);
+      // Provide detailed error information
+      let errorMessage = `Failed to fetch channel history: ${data.error}`;
+      
+      if (data.error === 'invalid_auth') {
+        errorMessage += '\n\nPossible fixes:\n1. Check SLACK_BOT_TOKEN is correct\n2. Verify bot has conversations:history scope\n3. Ensure bot is added to the channel';
+      } else if (data.error === 'channel_not_found') {
+        errorMessage += '\n\nBot may not have access to this channel. Add the bot to the channel first.';
+      } else if (data.error === 'missing_scope') {
+        errorMessage += '\n\nBot is missing required OAuth scopes. Add conversations:history scope.';
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    if (!data.messages || data.messages.length === 0) {
+      console.log('⚠️ No messages found in channel');
+      return [];
     }
 
     return data.messages.reverse(); // Return in chronological order
@@ -463,5 +493,16 @@ export class SlackAIService {
   }
 }
 
-// Export a singleton instance
-export const slackAIService = new SlackAIService(process.env.SLACK_BOT_TOKEN || '');
+// Validate bot token format
+function validateBotToken(token: string): boolean {
+  // Slack bot tokens should start with 'xoxb-' and be around 56+ characters
+  return token.startsWith('xoxb-') && token.length > 50;
+}
+
+// Export a singleton instance with validation
+const botToken = process.env.SLACK_BOT_TOKEN || '';
+if (botToken && !validateBotToken(botToken)) {
+  console.error('⚠️ Invalid SLACK_BOT_TOKEN format. Expected format: xoxb-...');
+}
+
+export const slackAIService = new SlackAIService(botToken);
