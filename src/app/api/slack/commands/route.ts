@@ -404,6 +404,7 @@ export async function POST(req: NextRequest) {
               });
             }
 
+            // Fetch real data for issues from GitHub
             const issues = await slackUserService.getIssuesForRepository(userRepos[0]);
             const issueList = issues.map((issue: { number: number; title: string }) => `• #${issue.number}: ${issue.title}`).join('\n');
 
@@ -435,6 +436,7 @@ ${issueList}`,
               });
             }
 
+            // Fetch real data for pull requests from GitHub
             const prs = await slackUserService.getPullRequestsForRepository(userRepos[0]);
             const prList = prs.map((pr: { number: number; title: string; state: string }) => `• #${pr.number}: ${pr.title} (${pr.state})`).join('\n');
 
