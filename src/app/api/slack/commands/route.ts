@@ -389,6 +389,94 @@ export async function POST(req: NextRequest) {
             });
           }
 
+        case 'issuelist':
+          try {
+            const userIdString = userId || ''; // Ensure userId is a string
+
+            console.log('Fetching issue list for user:', userIdString);
+            const { slackUserService } = await import('@/lib/slack-user-service');
+
+            const userRepos = await slackUserService.getUserRepositories(userIdString);
+            if (userRepos.length === 0) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '❌ No repositories found. Please connect your GitHub account.',
+              });
+            }
+
+            const issues = await slackUserService.getIssuesForRepository(userRepos[0]);
+            const issueList = issues.map((issue: { number: number; title: string }) => `• #${issue.number}: ${issue.title}`).join('\n');
+
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: `📝 *Issue List for ${userRepos[0]}:*
+${issueList}`,
+            });
+          } catch (error) {
+            console.error('Error fetching issue list:', error);
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: '❌ Failed to fetch issue list. Please try again.',
+            });
+          }
+
+        case 'prlist':
+          try {
+            const userIdString = userId || ''; // Ensure userId is a string
+
+            console.log('Fetching PR list for user:', userIdString);
+            const { slackUserService } = await import('@/lib/slack-user-service');
+
+            const userRepos = await slackUserService.getUserRepositories(userIdString);
+            if (userRepos.length === 0) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '❌ No repositories found. Please connect your GitHub account.',
+              });
+            }
+
+            const prs = await slackUserService.getPullRequestsForRepository(userRepos[0]);
+            const prList = prs.map((pr: { number: number; title: string; state: string }) => `• #${pr.number}: ${pr.title} (${pr.state})`).join('\n');
+
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: `🔀 *Pull Request List for ${userRepos[0]}:*
+${prList}`,
+            });
+          } catch (error) {
+            console.error('Error fetching PR list:', error);
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: '❌ Failed to fetch PR list. Please try again.',
+            });
+          }
+
+        case 'assign':
+          try {
+            const issueId = text?.split(' ')[1];
+            if (!issueId) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '❌ Please provide an issue ID to assign.',
+              });
+            }
+
+            console.log(`Assigning issue #${issueId} to MCP for user:`, userId);
+            const { slackAIService } = await import('@/lib/slack-ai-service');
+
+            const result = await slackAIService.assignIssueToMCP(issueId);
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: `✅ Issue #${issueId} successfully assigned to MCP.`,
+            });
+          } catch (error) {
+            console.error('Error assigning issue:', error);
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: '❌ Failed to assign issue. Please try again.',
+            });
+          }
+
         case 'status':
           const statusChecks = {
             slackBotToken: !!process.env.SLACK_BOT_TOKEN,
@@ -421,7 +509,7 @@ export async function POST(req: NextRequest) {
                 type: 'section',
                 text: {
                   type: 'mrkdwn',
-                  text: '*GitPulse Commands:*\n\n• `/gitpulse analyze` - Analyze recent channel messages for potential issues\n• `/gitpulse create-issue` - Create a new GitHub issue\n• `/gitpulse status` - Check bot configuration status\n• `/gitpulse help` - Show this help message\n\nYou can also mention @GitPulse in any channel to get my attention!'
+                  text: '*GitPulse Commands:*\n\n• `/gitpulse analyze` - Analyze recent channel messages for potential issues\n• `/gitpulse create-issue` - Create a new GitHub issue\n• `/gitpulse issuelist` - List issues in your repository\n• `/gitpulse prlist` - List pull requests in your repository\n• `/gitpulse assign <issueId>` - Assign an issue to MCP\n• `/gitpulse status` - Check bot configuration status\n• `/gitpulse help` - Show this help message\n\nYou can also mention @GitPulse in any channel to get my attention!'
                 }
               }
             ]

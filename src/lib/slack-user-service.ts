@@ -264,6 +264,30 @@ export class SlackUserService {
     // For now, return empty array as placeholder
     return [];
   }
+
+  /**
+   * Fetch issues for a repository
+   */
+  async getIssuesForRepository(repoName: string): Promise<{ number: number; title: string }[]> {
+    console.log('Fetching issues for repository:', repoName);
+    // Mock implementation; replace with actual GitHub API call
+    return [
+      { number: 1, title: 'Sample Issue 1' },
+      { number: 2, title: 'Sample Issue 2' },
+    ];
+  }
+
+  /**
+   * Fetch pull requests for a repository
+   */
+  async getPullRequestsForRepository(repoName: string): Promise<{ number: number; title: string; state: string }[]> {
+    console.log('Fetching pull requests for repository:', repoName);
+    // Mock implementation; replace with actual GitHub API call
+    return [
+      { number: 101, title: 'Sample PR 1', state: 'open' },
+      { number: 102, title: 'Sample PR 2', state: 'closed' },
+    ];
+  }
 }
 
 // Export singleton instance

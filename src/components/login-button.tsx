@@ -16,7 +16,7 @@ export function LoginButton() {
         <GithubIcon className="mr-2 h-5 w-5" />
         Login with GitHub
       </Button>
-      <Button 
+      {/* <Button 
         onClick={signInWithGoogle} 
         size="lg" 
         variant="outline"
@@ -24,7 +24,7 @@ export function LoginButton() {
       >
         <Chrome className="mr-2 h-5 w-5" />
         Login with Google
-      </Button>
+      </Button> */}
     </div>
   );
 }

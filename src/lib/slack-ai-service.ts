@@ -491,6 +491,15 @@ export class SlackAIService {
       return [];
     }
   }
+
+  /**
+   * Assign an issue to MCP
+   */
+  async assignIssueToMCP(issueId: string): Promise<void> {
+    console.log('Assigning issue to MCP:', issueId);
+    // Mock implementation; replace with actual logic
+    console.log(`Issue #${issueId} assigned to MCP successfully.`);
+  }
 }
 
 // Validate bot token format
