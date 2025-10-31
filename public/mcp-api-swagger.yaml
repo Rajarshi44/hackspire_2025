@@ -1,0 +1,300 @@
+openapi: 3.0.3
+info:
+  title: MCP Code Generation API
+  description: |
+    AI-powered code generation endpoint for GitHub issues. This endpoint automates the process of generating code fixes for GitHub issues by:
+    - Verifying user assignment to issues
+    - Analyzing repository context
+    - Generating code fixes using AI
+    - Validating TypeScript code
+    - Creating draft pull requests
+  version: 1.0.0
+  contact:
+    name: GitPulse MCP Team
+    email: support@gitpulse.dev
+
+servers:
+  - url: http://localhost:9002
+    description: Local Development Server
+  - url: https://your-production-domain.com
+    description: Production Server
+
+tags:
+  - name: MCP
+    description: Model Context Protocol endpoints for AI code generation
+
+paths:
+  /api/mcp/generate-code:
+    get:
+      summary: Get API Documentation
+      description: Returns endpoint documentation and usage information
+      tags:
+        - MCP
+      responses:
+        '200':
+          description: API documentation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: MCP Code Generation API
+                  version:
+                    type: string
+                    example: 1.0.0
+                  description:
+                    type: string
+                    example: AI-powered code generation endpoint for GitHub issues
+                  endpoint:
+                    type: string
+                    example: POST /api/mcp/generate-code
+                  requestBody:
+                    type: object
+                  responses:
+                    type: object
+                  authentication:
+                    type: string
+                    example: Requires GITHUB_TOKEN environment variable
+
+    post:
+      summary: Generate Code for GitHub Issue
+      description: |
+        Generates AI-powered code fixes for a GitHub issue. The endpoint performs the following steps:
+        1. Fetches issue metadata and verifies user assignment
+        2. Creates a new branch
+        3. Selects relevant files for code generation
+        4. Generates code fixes using AI
+        5. Validates generated TypeScript code
+        6. Commits changes atomically
+        7. Creates a draft pull request
+        8. Updates Firestore job status
+        9. Posts a comment on the issue
+      tags:
+        - MCP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPGenerateCodeRequest'
+            examples:
+              withRelatedFiles:
+                summary: Request with specific files
+                value:
+                  owner: Rajarshi44
+                  repo: hackspire_2025
+                  issue_number: 42
+                  jobId: job-20250131-143052
+                  requested_by: Rajarshi44
+                  related_files:
+                    - src/app/page.tsx
+                    - src/components/chat-interface.tsx
+              withoutRelatedFiles:
+                summary: Request with AI file selection
+                value:
+                  owner: Rajarshi44
+                  repo: hackspire_2025
+                  issue_number: 42
+                  jobId: job-20250131-143052
+                  requested_by: Rajarshi44
+
+      responses:
+        '200':
+          description: Code generation successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPSuccessResponse'
+              example:
+                success: true
+                jobId: job-20250131-143052
+                pr_url: https://github.com/Rajarshi44/hackspire_2025/pull/43
+                pr_number: 43
+                branch: gitpulse/issue-42/draft-1738335052000
+
+        '400':
+          description: Bad Request - Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+              example:
+                success: false
+                jobId: unknown
+                error: Invalid request payload
+                details: "owner: Required; repo: Required"
+
+        '403':
+          description: Forbidden - User not assigned to issue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+              example:
+                success: false
+                jobId: Rajarshi44
+                error: Not authorized
+                details: "User Rajarshi44 is not assigned to this issue. Assignees: john_doe, jane_smith"
+
+        '422':
+          description: Unprocessable Entity - TypeScript validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+              example:
+                success: false
+                jobId: unknown
+                error: Validation failed
+                details: "TypeScript validation failed: src/app/page.tsx(15,10): error TS2304: Cannot find name 'UnknownType'."
+
+        '429':
+          description: Too Many Requests - GitHub API rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+              example:
+                success: false
+                jobId: unknown
+                error: Rate limit exceeded
+                details: "GitHub API rate limit exceeded. Resets at 2025-01-31T15:00:00Z"
+
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPErrorResponse'
+              example:
+                success: false
+                jobId: unknown
+                error: Internal server error
+                details: An unexpected error occurred
+
+components:
+  schemas:
+    MCPGenerateCodeRequest:
+      type: object
+      required:
+        - owner
+        - repo
+        - issue_number
+        - jobId
+        - requested_by
+      properties:
+        owner:
+          type: string
+          description: GitHub repository owner/organization name
+          example: Rajarshi44
+          minLength: 1
+        repo:
+          type: string
+          description: GitHub repository name
+          example: hackspire_2025
+          minLength: 1
+        issue_number:
+          type: integer
+          description: GitHub issue number
+          example: 42
+          minimum: 1
+        jobId:
+          type: string
+          description: Unique job identifier for tracking
+          example: job-20250131-143052
+          minLength: 1
+        requested_by:
+          type: string
+          description: GitHub username of the requester (must be assigned to issue)
+          example: Rajarshi44
+          minLength: 1
+        related_files:
+          type: array
+          description: Optional list of specific files to analyze. If not provided, AI will select relevant files.
+          items:
+            type: string
+          example:
+            - src/app/page.tsx
+            - src/components/chat-interface.tsx
+
+    MCPSuccessResponse:
+      type: object
+      required:
+        - success
+        - jobId
+        - pr_url
+        - pr_number
+        - branch
+      properties:
+        success:
+          type: boolean
+          description: Indicates successful code generation
+          example: true
+        jobId:
+          type: string
+          description: Job identifier from the request
+          example: job-20250131-143052
+        pr_url:
+          type: string
+          format: uri
+          description: URL of the created draft pull request
+          example: https://github.com/Rajarshi44/hackspire_2025/pull/43
+        pr_number:
+          type: integer
+          description: GitHub pull request number
+          example: 43
+        branch:
+          type: string
+          description: Name of the created branch
+          example: gitpulse/issue-42/draft-1738335052000
+
+    MCPErrorResponse:
+      type: object
+      required:
+        - success
+        - jobId
+        - error
+      properties:
+        success:
+          type: boolean
+          description: Indicates failure
+          example: false
+        jobId:
+          type: string
+          description: Job identifier or 'unknown'
+          example: unknown
+        error:
+          type: string
+          description: Error category
+          enum:
+            - Invalid request payload
+            - Not authorized
+            - Validation failed
+            - Rate limit exceeded
+            - GitHub API error
+            - Internal server error
+          example: Not authorized
+        details:
+          type: string
+          description: Detailed error message
+          example: User Rajarshi44 is not assigned to this issue.
+
+  securitySchemes:
+    GitHubToken:
+      type: apiKey
+      in: header
+      name: GITHUB_TOKEN
+      description: |
+        GitHub Personal Access Token (Classic) configured via environment variable.
+        Required scopes: `repo` (Full control of private repositories)
+        
+        Generate at: https://github.com/settings/tokens/new
+
+security:
+  - GitHubToken: []
+
+externalDocs:
+  description: Complete Setup Guide
+  url: https://github.com/Rajarshi44/hackspire_2025/blob/main/MCP_SETUP_GUIDE.md
