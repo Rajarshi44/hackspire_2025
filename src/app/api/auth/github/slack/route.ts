@@ -44,10 +44,23 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing user_id parameter' }, { status: 400 });
     }
 
-    // Build GitHub OAuth URL
+    // Build GitHub OAuth URL with correct redirect URI
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : process.env.NEXTAUTH_URL || 'http://localhost:9002';
+    
+    const redirectUri = `${baseUrl}/api/auth/github/slack`;
+    
+    console.log('🔗 GitHub OAuth redirect setup:', {
+      baseUrl,
+      redirectUri,
+      vercelUrl: process.env.VERCEL_URL,
+      nextAuthUrl: process.env.NEXTAUTH_URL
+    });
+
     const githubOAuthUrl = new URL('https://github.com/login/oauth/authorize');
     githubOAuthUrl.searchParams.set('client_id', process.env.GITHUB_CLIENT_ID!);
-    githubOAuthUrl.searchParams.set('redirect_uri', `${process.env.NEXTAUTH_URL || 'http://localhost:9002'}/api/auth/github/slack`);
+    githubOAuthUrl.searchParams.set('redirect_uri', redirectUri);
     githubOAuthUrl.searchParams.set('scope', 'repo,user:email'); // Permissions needed
     githubOAuthUrl.searchParams.set('state', JSON.stringify({ 
       slack_user_id: slackUserId,
