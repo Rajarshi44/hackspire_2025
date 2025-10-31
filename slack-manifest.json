@@ -1,0 +1,43 @@
+{
+  "display_information": {
+    "name": "GitPulse",
+    "description": "AI assistant that analyzes channels, suggests fixes, and helps create GitHub issues.",
+    "background_color": "#2EB67D"
+  },
+  "features": {
+    "slash_commands": [
+      {
+        "command": "/gitpulse",
+        "url": "https://devx-rho.vercel.app/api/slack/commands",
+        "description": "GitPulse AI assistant",
+        "usage_hint": "analyze | create-issue | list-issues | list-prs | match-pr | suggest-fix | detect-potential | detect-resolution"
+      }
+    ],
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://devx-rho.vercel.app/api/slack/interactions"
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "commands",
+        "chat:write",
+        "conversations.history",
+        "conversations.read",
+        "users:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://devx-rho.vercel.app/api/slack/events",
+      "bot_events": [
+        "app_mention",
+        "message.channels"
+      ]
+    },
+    "org_deploy_enabled": false,
+    "is_hosted": false
+  }
+}

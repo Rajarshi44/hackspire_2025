@@ -5,23 +5,69 @@ import { createHmac, timingSafeEqual } from 'crypto';
  * Returns false if signature/timestamp missing or invalid.
  */
 export function verifySlackRequest(body: string, signature: string | null, timestamp: string | null) {
-  if (!signature || !timestamp) return false;
-  const signingSecret = process.env.SLACK_SIGNING_SECRET;
-  if (!signingSecret) {
-    console.warn('Missing SLACK_SIGNING_SECRET');
+  console.log('Verifying Slack request:', {
+    hasSignature: !!signature,
+    hasTimestamp: !!timestamp,
+    timestampValue: timestamp,
+    bodyLength: body?.length,
+    signaturePrefix: signature?.substring(0, 10)
+  });
+
+  if (!signature || !timestamp) {
+    console.error('Missing signature or timestamp');
     return false;
   }
 
+  const signingSecret = process.env.SLACK_SIGNING_SECRET;
+  if (!signingSecret) {
+    console.error('Missing SLACK_SIGNING_SECRET environment variable');
+    return false;
+  }
+
+  // Validate timestamp (prevent replay attacks)
+  const timestampNum = parseInt(timestamp);
+  const currentTime = Math.floor(Date.now() / 1000);
+  const timeDiff = Math.abs(currentTime - timestampNum);
+  
+  console.log('Timestamp validation:', {
+    requestTimestamp: timestampNum,
+    currentTimestamp: currentTime,
+    timeDifference: timeDiff,
+    maxAllowed: 300 // 5 minutes
+  });
+
+  // Allow up to 5 minutes difference (Slack requirement)
+  if (timeDiff > 300) {
+    console.error('Request timestamp too old:', { timeDiff, maxAllowed: 300 });
+    return false;
+  }
+
+  // Build the signature string
   const baseString = `v0:${timestamp}:${body}`;
   const expected = `v0=${createHmac('sha256', signingSecret).update(baseString).digest('hex')}`;
+
+  console.log('Signature comparison:', {
+    expectedLength: expected.length,
+    receivedLength: signature.length,
+    expectedPrefix: expected.substring(0, 10),
+    receivedPrefix: signature.substring(0, 10)
+  });
 
   try {
     const a = Buffer.from(expected, 'utf8');
     const b = Buffer.from(signature, 'utf8');
+    
     // Use timingSafeEqual when buffers are same length
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b);
+    if (a.length !== b.length) {
+      console.error('Signature length mismatch:', { expected: a.length, received: b.length });
+      return false;
+    }
+    
+    const isValid = timingSafeEqual(a, b);
+    console.log('Signature verification result:', isValid);
+    return isValid;
   } catch (err) {
+    console.error('Signature verification error:', err);
     return false;
   }
 }

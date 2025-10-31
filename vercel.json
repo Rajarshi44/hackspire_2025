@@ -1,0 +1,42 @@
+{
+  "buildCommand": "pnpm run build",
+  "framework": "nextjs",
+  "installCommand": "pnpm install",
+  "outputDirectory": ".next",
+  "functions": {
+    "src/app/api/slack/commands/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/slack/events/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/slack/interactions/route.ts": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/slack/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "POST, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, x-slack-signature, x-slack-request-timestamp"
+        }
+      ]
+    }
+  ]
+}
