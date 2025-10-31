@@ -8,8 +8,8 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Optimize for Vercel deployment
-  output: 'standalone',
+  // Optimize for Vercel deployment (disable standalone for local dev)
+  output: process.env.VERCEL ? 'standalone' : undefined,
   
   // Configure webpack for serverless functions
   webpack: (config, { isServer }) => {
@@ -49,10 +49,8 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // API routes configuration for better performance
-  experimental: {
-    serverComponentsExternalPackages: ['genkit'],
-  },
+  // External packages configuration for serverless
+  serverExternalPackages: ['genkit'],
 };
 
 export default nextConfig;
