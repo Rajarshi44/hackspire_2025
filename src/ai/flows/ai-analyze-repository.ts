@@ -90,7 +90,7 @@ async function getFileContent(repoOwner: string, repoName: string, path: string,
     // Content is base64 encoded
     return Buffer.from(data.content, 'base64').toString('utf-8');
 }
-
+6
 
 export async function aiAnalyzeRepository(input: AIAnalyzeRepositoryInput): Promise<AIAnalyzeRepositoryOutput> {
     return aiAnalyzeRepositoryFlow(input);
