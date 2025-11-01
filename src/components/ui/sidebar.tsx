@@ -405,6 +405,13 @@ const SidebarContent = React.forwardRef<
       data-sidebar="content"
       className={cn(
         "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
+        // Custom scrollbar styles to match theme
+        "scrollbar-thin scrollbar-track-sidebar-background scrollbar-thumb-sidebar-border hover:scrollbar-thumb-sidebar-accent",
+        "[&::-webkit-scrollbar]:w-2",
+        "[&::-webkit-scrollbar-track]:bg-sidebar-background",
+        "[&::-webkit-scrollbar-thumb]:bg-sidebar-border",
+        "[&::-webkit-scrollbar-thumb]:rounded-full",
+        "[&::-webkit-scrollbar-thumb:hover]:bg-sidebar-accent",
         className
       )}
       {...props}
@@ -714,6 +721,12 @@ const SidebarMenuSub = React.forwardRef<
     className={cn(
       "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-l border-sidebar-border px-2.5 py-0.5",
       "group-data-[collapsible=icon]:hidden",
+      // Custom scrollbar styles for submenu
+      "[&::-webkit-scrollbar]:w-1.5",
+      "[&::-webkit-scrollbar-track]:bg-transparent",
+      "[&::-webkit-scrollbar-thumb]:bg-sidebar-border",
+      "[&::-webkit-scrollbar-thumb]:rounded-full",
+      "[&::-webkit-scrollbar-thumb:hover]:bg-sidebar-accent",
       className
     )}
     {...props}

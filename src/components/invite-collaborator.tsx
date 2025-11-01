@@ -42,7 +42,7 @@ type GitHubCollaborator = {
   html_url: string;
 };
 
-type Role = 'developer' | 'viewer';
+type Role = 'developer';
 
 export function InviteCollaboratorDialog({
   isOpen,
@@ -50,7 +50,7 @@ export function InviteCollaboratorDialog({
   repoFullName,
 }: InviteCollaboratorDialogProps) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<Role>('viewer');
+  const [role, setRole] = useState<Role>('developer');
   const [isLoading, setIsLoading] = useState(false);
   const [collaborators, setCollaborators] = useState<GitHubCollaborator[]>([]);
   const [isFetchingCollaborators, setIsFetchingCollaborators] = useState(false);
@@ -244,7 +244,6 @@ export function InviteCollaboratorDialog({
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem value="developer">Developer</SelectItem>
-                    <SelectItem value="viewer">Viewer</SelectItem>
                 </SelectContent>
             </Select>
             <Button
