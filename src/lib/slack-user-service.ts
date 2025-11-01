@@ -1,0 +1,462 @@
+import { getFirestore, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { initializeApp, getApps } from 'firebase/app';
+
+interface SlackUserData {
+  slackUserId: string;
+  github_token?: string;
+  github_user?: {
+    login: string;
+    id: number;
+    avatar_url: string;
+    name?: string;
+  };
+  default_repository?: string;
+  preferences?: {
+    auto_suggestions: boolean;
+    notification_channel?: string;
+  };
+  connected_at?: Date;
+  last_activity?: Date;
+}
+
+export class SlackUserService {
+  private db: any;
+
+  constructor() {
+    this.initializeFirebase();
+  }
+
+  private initializeFirebase() {
+    try {
+      // Check if Firebase is already initialized
+      if (getApps().length === 0) {
+        // Initialize Firebase with config from environment variables
+        const firebaseConfig = {
+          apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+          authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+          messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+          appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+        };
+
+        console.log('🔥 Initializing Firebase for SlackUserService:', {
+          hasApiKey: !!firebaseConfig.apiKey,
+          hasProjectId: !!firebaseConfig.projectId,
+          projectId: firebaseConfig.projectId
+        });
+
+        initializeApp(firebaseConfig);
+      }
+      
+      this.db = getFirestore();
+      console.log('✅ Firebase initialized successfully for SlackUserService');
+    } catch (error) {
+      console.error('❌ Failed to initialize Firebase:', error);
+      throw new Error(`Firebase initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Store user GitHub authentication data
+   */
+  async storeGitHubAuth(slackUserId: string, githubData: {
+    access_token: string;
+    github_user: any;
+  }): Promise<void> {
+    try {
+      const userRef = doc(this.db, 'slack_users', slackUserId);
+      
+      await setDoc(userRef, {
+        slackUserId,
+        github_token: githubData.access_token,
+        github_user: {
+          login: githubData.github_user.login,
+          id: githubData.github_user.id,
+          avatar_url: githubData.github_user.avatar_url,
+          name: githubData.github_user.name,
+        },
+        connected_at: new Date(),
+        last_activity: new Date(),
+        preferences: {
+          auto_suggestions: true, // Default to enabled
+        }
+      }, { merge: true });
+
+      console.log('GitHub auth stored for Slack user:', slackUserId);
+    } catch (error) {
+      console.error('Error storing GitHub auth:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user's GitHub token
+   */
+  async getGitHubToken(slackUserId: string): Promise<string | null> {
+    try {
+      if (!this.db) {
+        console.warn('⚠️ Firebase not initialized, cannot get GitHub token');
+        return null;
+      }
+      
+      const userRef = doc(this.db, 'slack_users', slackUserId);
+      const userDoc = await getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data() as SlackUserData;
+        return userData.github_token || null;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error getting GitHub token:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if user has GitHub authentication
+   */
+  async hasGitHubAuth(slackUserId: string): Promise<boolean> {
+    try {
+      if (!this.db) {
+        console.warn('⚠️ Firebase not initialized, assuming no GitHub auth');
+        return false;
+      }
+      const token = await this.getGitHubToken(slackUserId);
+      return !!token;
+    } catch (error) {
+      console.error('Error checking GitHub auth:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get user's complete data
+   */
+  async getUserData(slackUserId: string): Promise<SlackUserData | null> {
+    try {
+      const userRef = doc(this.db, 'slack_users', slackUserId);
+      const userDoc = await getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        return userDoc.data() as SlackUserData;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error getting user data:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update user's default repository
+   */
+  async setDefaultRepository(slackUserId: string, repository: string): Promise<void> {
+    try {
+      const userRef = doc(this.db, 'slack_users', slackUserId);
+      
+      await updateDoc(userRef, {
+        default_repository: repository,
+        last_activity: new Date(),
+      });
+
+      console.log('Default repository updated for user:', slackUserId, repository);
+    } catch (error) {
+      console.error('Error setting default repository:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update user preferences
+   */
+  async updatePreferences(slackUserId: string, preferences: Partial<SlackUserData['preferences']>): Promise<void> {
+    try {
+      const userRef = doc(this.db, 'slack_users', slackUserId);
+      const currentData = await this.getUserData(slackUserId);
+      
+      const updatedPreferences = {
+        ...currentData?.preferences,
+        ...preferences,
+      };
+      
+      await updateDoc(userRef, {
+        preferences: updatedPreferences,
+        last_activity: new Date(),
+      });
+
+      console.log('Preferences updated for user:', slackUserId);
+    } catch (error) {
+      console.error('Error updating preferences:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Record user activity
+   */
+  async recordActivity(slackUserId: string): Promise<void> {
+    try {
+      const userRef = doc(this.db, 'slack_users', slackUserId);
+      
+      await updateDoc(userRef, {
+        last_activity: new Date(),
+      });
+    } catch (error) {
+      // Don't throw on activity recording errors
+      console.error('Error recording activity:', error);
+    }
+  }
+
+  /**
+   * Get user's GitHub repositories
+   */
+  async getUserRepositories(slackUserId: string): Promise<string[]> {
+    try {
+      if (!this.db) {
+        console.warn('⚠️ Firebase not initialized, cannot get repositories');
+        return [];
+      }
+      
+      let token = await this.getGitHubToken(slackUserId);
+      const fallback = process.env.GITHUB_FALLBACK_TOKEN || null;
+      if (!token && fallback) {
+        console.warn('Using fallback GitHub token for user repositories', { slackUserId });
+        token = fallback;
+      }
+
+      if (!token) {
+        console.log('No GitHub token found for user:', slackUserId);
+        return [];
+      }
+
+      // Fetch repositories from GitHub API
+      const response = await fetch('https://api.github.com/user/repos?per_page=50&sort=updated&type=owner', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'GitPulse-Bot/1.0'
+        },
+      });
+
+      if (!response.ok) {
+        console.error('Failed to fetch repositories from GitHub:', response.status, response.statusText);
+        return [];
+      }
+
+      const repos = await response.json();
+      const repoNames = repos
+        .filter((repo: any) => !repo.fork && !repo.archived) // Only own, active repos
+        .map((repo: any) => repo.full_name)
+        .slice(0, 25); // Limit to 25 most recent
+
+      console.log('Fetched repositories for user:', slackUserId, repoNames.length);
+      return repoNames;
+    } catch (error) {
+      console.error('Error fetching user repositories:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get users with auto-suggestions enabled for a channel
+   */
+  async getActiveUsersInChannel(channelId: string): Promise<SlackUserData[]> {
+    // This would require more complex querying
+    // For now, return empty array as placeholder
+    return [];
+  }
+
+  /**
+   * Fetch issues for a repository
+   */
+  async getIssuesForRepository(repoName: string, slackUserId?: string): Promise<{ number: number; title: string }[]> {
+    console.log('Fetching issues for repository:', repoName, { slackUserId });
+    try {
+      // Prefer per-user token when available
+      let token: string | null = null;
+      let usedFallback = false;
+      if (slackUserId) {
+        token = await this.getGitHubToken(slackUserId);
+      }
+      if (!token) {
+        const fallback = process.env.GITHUB_FALLBACK_TOKEN || null;
+        if (fallback) {
+          token = fallback;
+          usedFallback = true;
+          console.warn('Using fallback GitHub token to fetch issues', { repoName, slackUserId });
+        }
+      }
+      if (!token) {
+        console.warn('No GitHub token available for user; cannot fetch issues', { slackUserId });
+        return [];
+      }
+
+      // repoName expected in form 'owner/repo'
+      const url = `https://api.github.com/repos/${repoName}/issues?per_page=30&state=all`;
+
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'GitPulse-Bot/1.0'
+      };
+
+      headers['Authorization'] = `Bearer ${token}`;
+
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) {
+        console.error('GitHub issues fetch failed', repoName, resp.status, resp.statusText);
+        return [];
+      }
+
+      const data = await resp.json();
+      // GitHub API returns both issues and PRs on the issues endpoint; filter out PRs
+      const issues = (data as any[])
+        .filter(item => !item.pull_request)
+        .map(item => ({ number: item.number, title: item.title }));
+
+      // Optionally, we could return metadata about fallback usage. For now, return issues list.
+      return issues;
+    } catch (error) {
+      console.error('Error fetching issues from GitHub:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch pull requests for a repository
+   */
+  async getPullRequestsForRepository(repoName: string, slackUserId?: string): Promise<{ number: number; title: string; state: string }[]> {
+    console.log('Fetching pull requests for repository:', repoName, { slackUserId });
+    try {
+      let token: string | null = null;
+      let usedFallback = false;
+      if (slackUserId) {
+        token = await this.getGitHubToken(slackUserId);
+      }
+      if (!token) {
+        const fallback = process.env.GITHUB_FALLBACK_TOKEN || null;
+        if (fallback) {
+          token = fallback;
+          usedFallback = true;
+          console.warn('Using fallback GitHub token to fetch PRs', { repoName, slackUserId });
+        }
+      }
+      if (!token) {
+        console.warn('No GitHub token available for user; cannot fetch PRs', { slackUserId });
+        return [];
+      }
+
+      const url = `https://api.github.com/repos/${repoName}/pulls?per_page=30&state=all`;
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'GitPulse-Bot/1.0'
+      };
+      headers['Authorization'] = `Bearer ${token}`;
+
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) {
+        console.error('GitHub PRs fetch failed', repoName, resp.status, resp.statusText);
+        return [];
+      }
+
+      const data = await resp.json();
+      const prs = (data as any[]).map(pr => ({ number: pr.number, title: pr.title, state: pr.state }));
+      return prs;
+    } catch (error) {
+      console.error('Error fetching PRs from GitHub:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get user's current default repository
+   */
+  async getCurrentRepository(slackUserId: string): Promise<string | null> {
+    try {
+      const userData = await this.getUserData(slackUserId);
+      return userData?.default_repository || null;
+    } catch (error) {
+      console.error('Error getting current repository:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Disconnect user's GitHub authentication
+   */
+  async disconnectGitHubAuth(slackUserId: string): Promise<void> {
+    try {
+      const userRef = doc(this.db, 'slack_users', slackUserId);
+      
+      // Update document to remove GitHub authentication data
+      await updateDoc(userRef, {
+        github_token: null,
+        github_user: null,
+        default_repository: null,
+        last_activity: new Date(),
+      });
+
+      console.log('GitHub auth disconnected for user:', slackUserId);
+    } catch (error) {
+      console.error('Error disconnecting GitHub auth:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create a GitHub issue in the specified repository using the user's GitHub token
+   */
+  async createIssueForRepository(repoName: string, title: string, body: string, slackUserId: string): Promise<{ number: number; url: string; title: string } | null> {
+    console.log('Creating GitHub issue:', { repoName, title, slackUserId });
+    try {
+      let token = await this.getGitHubToken(slackUserId);
+      let usedFallback = false;
+      if (!token) {
+        const fallback = process.env.GITHUB_FALLBACK_TOKEN || null;
+        if (fallback) {
+          token = fallback;
+          usedFallback = true;
+          console.warn('Using fallback GitHub token to create issue', { repoName, slackUserId });
+        }
+      }
+      if (!token) {
+        console.warn('No GitHub token available for user; cannot create issue', { slackUserId });
+        return null;
+      }
+
+      const url = `https://api.github.com/repos/${repoName}/issues`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'GitPulse-Bot/1.0',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ title, body })
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error('Failed to create GitHub issue', resp.status, resp.statusText, text);
+        return null;
+      }
+
+      const data = await resp.json();
+      const result = { number: data.number, url: data.html_url, title: data.title };
+      if (usedFallback) {
+        // Optionally annotate in logs that fallback was used
+        console.warn('Issue created using fallback token — attribution may not match user', { result, repoName, slackUserId });
+      }
+      return result;
+    } catch (error) {
+      console.error('Error creating GitHub issue:', error);
+      return null;
+    }
+  }
+}
+
+// Export singleton instance
+export const slackUserService = new SlackUserService();

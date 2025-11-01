@@ -8,14 +8,18 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { ChatMessage, type Message } from '@/components/chat-message';
 import { MessageInput } from '@/components/message-input';
 import { aiDetectIssue } from '@/ai/flows/ai-detects-potential-issues';
+import { aiDetectIssueResolution } from '@/ai/flows/ai-detects-issue-resolution';
+import { aiMatchPullRequestWithIssue } from '@/ai/flows/ai-matches-pr-with-issue';
 import { Button } from './ui/button';
-import { Github, Sparkles, ExternalLink, GitPullRequest, ListTodo } from 'lucide-react';
+import { Github, Sparkles, ExternalLink, GitPullRequest, ListTodo, CheckCircle, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { aiCreateGithubIssue } from '@/ai/flows/ai-creates-github-issues';
 import { aiListGithubIssues } from '@/ai/flows/ai-list-github-issues';
 import { aiListGithubPRs } from '@/ai/flows/ai-list-github-prs';
 import { ScrollArea } from './ui/scroll-area';
 import Link from 'next/link';
+import KanbanBoard, { KanbanIssue } from '@/components/kanban-board';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
 
 type ChatInterfaceProps = {
   repoFullName: string;
@@ -28,6 +32,8 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
   const { toast } = useToast();
   const [isCreatingIssue, setIsCreatingIssue] = useState(false);
   const [isBotThinking, setIsBotThinking] = useState(false);
+  const [isKanbanOpen, setIsKanbanOpen] = useState(false);
+  const [isMdUp, setIsMdUp] = useState(false);
 
   const encodedRepoFullName = encodeURIComponent(repoFullName);
 
@@ -80,7 +86,25 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
     }
   }, [messages]);
 
-  const sendBotMessage = async (text: string, type: 'issue-list' | 'pr-list', data: any[]) => {
+  // Track viewport for responsive Kanban behavior (md breakpoint: 768px)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(min-width: 768px)');
+    const handler = (e: MediaQueryListEvent | MediaQueryList) => setIsMdUp('matches' in e ? e.matches : (e as MediaQueryList).matches);
+    // Initialize
+    setIsMdUp(mq.matches);
+    // Subscribe
+    try {
+      mq.addEventListener('change', handler as (e: MediaQueryListEvent) => void);
+      return () => mq.removeEventListener('change', handler as (e: MediaQueryListEvent) => void);
+    } catch {
+      // Safari fallback
+      mq.addListener(handler as any);
+      return () => mq.removeListener(handler as any);
+    }
+  }, []);
+
+  const sendBotMessage = async (text: string, type: 'issue-list' | 'pr-list' | 'pr-verification', data: any[]) => {
     if (!messagesRef) return;
     const tempId = `temp_${Date.now()}`;
     const botMessage: Omit<Message, 'id' | 'timestamp'> = {
@@ -151,7 +175,34 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
     }
   }
 
-  const handleSendMessage = async (text: string) => {
+  const handleManualPRVerification = async (issueRef: string) => {
+    if (!githubToken || !user) return;
+    setIsBotThinking(true);
+    
+    try {
+      const [repoOwner, repoName] = repoFullName.split('/');
+      const matchResult = await aiMatchPullRequestWithIssue({
+        repoOwner,
+        repoName,
+        issueReference: issueRef,
+        claimedBy: user.displayName || user.uid,
+        accessToken: githubToken,
+      });
+
+      const text = matchResult.matchFound 
+        ? `✅ **PR Verification**: Found ${matchResult.matchingPRs.length} matching pull request${matchResult.matchingPRs.length > 1 ? 's' : ''} for "${issueRef}"` 
+        : `❌ **PR Verification**: No matching pull requests found for "${issueRef}".`;
+        
+      await sendBotMessage(text, 'pr-verification', matchResult.matchingPRs);
+    } catch(e) {
+      console.error(e);
+      await sendBotMessage('Sorry, I was unable to verify pull requests.', 'pr-verification', []);
+    } finally {
+      setIsBotThinking(false);
+    }
+  }
+
+  const handleSendMessage = async (text: string, mentions: string[] = []) => {
     if (!text.trim() || !user || !messagesRef) return;
 
     if (text.trim() === '/issuelist') {
@@ -162,6 +213,11 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
       await handleListPRs();
       return;
     }
+    if (text.trim().startsWith('/solved')) {
+      const issueRef = text.trim().replace('/solved', '').trim() || 'recent issue';
+      await handleManualPRVerification(issueRef);
+      return;
+    }
 
     const tempId = `temp_${Date.now()}`;
     const newMessage: Omit<Message, 'id' | 'timestamp'> = {
@@ -170,6 +226,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
       avatarUrl: user.photoURL || '',
       text: text,
       isIssue: false,
+      ...(mentions.length > 0 && { mentions }),
     };
     
     const finalNewMessage = { ...newMessage, timestamp: serverTimestamp(), tempId: tempId };
@@ -186,10 +243,64 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
     try {
       const newDocRef = await addDoc(messagesRef, finalNewMessage);
       
-      const recentMessages = (serverMessages ?? []).slice(-9).map(m => ({ sender: m.sender, text: m.text }));
-      recentMessages.push({ sender: newMessage.sender, text: newMessage.text });
+      const recentMessages = (serverMessages ?? []).slice(-9).map(m => ({ 
+        sender: m.sender, 
+        text: m.text,
+        senderId: m.senderId 
+      }));
+      recentMessages.push({ 
+        sender: newMessage.sender, 
+        text: newMessage.text, 
+        senderId: newMessage.senderId 
+      });
       
-      const detectionResult = await aiDetectIssue({ messages: recentMessages });
+      // Check for issue resolution claims
+      const resolutionResult = await aiDetectIssueResolution({
+        messages: recentMessages,
+        currentUserId: user.uid,
+      });
+
+      if (resolutionResult.isResolutionClaim && resolutionResult.issueReference && githubToken) {
+        // User claims to have resolved an issue - check for matching PRs
+        const [repoOwner, repoName] = repoFullName.split('/');
+        const matchResult = await aiMatchPullRequestWithIssue({
+          repoOwner,
+          repoName,
+          issueReference: resolutionResult.issueReference,
+          claimedBy: user.displayName || user.uid,
+          accessToken: githubToken,
+        });
+
+        // Send AI response about PR verification
+        const verificationTempId = `temp_verification_${Date.now()}`;
+        const verificationMessage: Omit<Message, 'id' | 'timestamp'> = {
+          sender: 'GitPulse AI',
+          senderId: 'ai_assistant',
+          avatarUrl: '/brain-circuit.svg',
+          text: matchResult.matchFound 
+            ? `✅ **PR Verification**: I found ${matchResult.matchingPRs.length} matching pull request${matchResult.matchingPRs.length > 1 ? 's' : ''} for "${resolutionResult.issueReference}"` 
+            : `❌ **PR Verification**: No matching pull requests found for "${resolutionResult.issueReference}". ${resolutionResult.resolutionMethod === 'pull_request' ? 'You mentioned creating a PR - it might not be visible yet or may need different keywords.' : ''}`,
+          isSystemMessage: true,
+          systemMessageType: 'pr-verification',
+          systemMessageData: matchResult.matchingPRs,
+        };
+
+        const finalVerificationMessage = { ...verificationMessage, timestamp: serverTimestamp(), tempId: verificationTempId };
+        const tempOptimisticVerificationMessage: Message = {
+          ...verificationMessage,
+          id: verificationTempId,
+          timestamp: { seconds: Date.now() / 1000 + 2, nanoseconds: 0 },
+          tempId: verificationTempId,
+        };
+
+        setOptimisticMessages(prev => [...prev, tempOptimisticVerificationMessage]);
+        await addDoc(messagesRef, finalVerificationMessage);
+      }
+      
+      const detectionResult = await aiDetectIssue({ 
+        messages: recentMessages.map(m => ({ sender: m.sender, text: m.text })),
+        ...(mentions.length > 0 && { mentions })
+      });
       
       if (detectionResult.is_issue) {
           const aiTempId = `temp_ai_${Date.now()}`;
@@ -197,12 +308,13 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
               sender: 'GitPulse AI',
               senderId: 'ai_assistant',
               avatarUrl: '/brain-circuit.svg',
-              text: `I've detected a potential issue: **${detectionResult.title}**`,
+              text: `I've detected a potential issue: **${detectionResult.title}**${detectionResult.assignees && detectionResult.assignees.length > 0 ? `\n\nSuggested assignees: ${detectionResult.assignees.map(a => `@${a}`).join(', ')}` : ''}`,
               isIssue: true,
               issueDetails: {
                   title: detectionResult.title,
                   description: detectionResult.description,
                   priority: detectionResult.priority,
+                  ...(detectionResult.assignees && detectionResult.assignees.length > 0 && { assignees: detectionResult.assignees }),
               },
               status: 'pending'
           };
@@ -239,6 +351,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
             issueTitle: message.issueDetails.title,
             issueDescription: message.issueDetails.description,
             accessToken: githubToken,
+            ...(message.issueDetails.assignees && message.issueDetails.assignees.length > 0 && { assignees: message.issueDetails.assignees }),
         });
 
         const messageRef = doc(messagesRef, message.id);
@@ -296,63 +409,188 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
         </div>
       )
     }
+    
+    if (msg.systemMessageType === 'pr-verification') {
+      const matchingPRs = msg.systemMessageData || [];
+      return (
+        <div className='ml-12 mt-2 space-y-2'>
+          {matchingPRs.length > 0 ? (
+            matchingPRs.map((pr: any) => (
+              <Link href={pr.url} key={pr.number} target="_blank">
+                <div className='flex items-center gap-3 p-2 rounded-md border bg-card hover:bg-accent/50 transition-colors'>
+                  <div className='flex items-center gap-2'>
+                    <GitPullRequest className='h-5 w-5 text-green-600' />
+                    {pr.matchConfidence === 'high' && <CheckCircle className='h-4 w-4 text-green-600' />}
+                    {pr.matchConfidence === 'medium' && <CheckCircle className='h-4 w-4 text-yellow-600' />}
+                    {pr.matchConfidence === 'low' && <AlertCircle className='h-4 w-4 text-orange-600' />}
+                  </div>
+                  <div className='flex-1'>
+                    <div className='flex items-center gap-2'>
+                      <span className='font-medium'>#{pr.number} {pr.title}</span>
+                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                        pr.matchConfidence === 'high' ? 'bg-green-100 text-green-800' :
+                        pr.matchConfidence === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-orange-100 text-orange-800'
+                      }`}>
+                        {pr.matchConfidence} confidence
+                      </span>
+                    </div>
+                    <p className='text-xs text-muted-foreground'>
+                      By {pr.author} • {pr.matchReason}
+                    </p>
+                  </div>
+                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className='flex items-center gap-3 p-2 rounded-md border bg-muted/50'>
+              <AlertCircle className='h-5 w-5 text-muted-foreground' />
+              <div className='flex-1'>
+                <span className='text-sm text-muted-foreground'>
+                  No matching pull requests found. The PR might be in a different repository or use different keywords.
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+    
     return null;
   }
 
-  return (
-    <div className="flex flex-col h-[calc(100vh-5rem)]">
-        <ScrollArea className="flex-1" ref={scrollAreaRef}>
-            <div className="p-4 space-y-4">
-                {isLoading && messages.length === 0 && (
-                    <div className="flex justify-center items-center h-full">
-                        <p>Loading messages...</p>
-                    </div>
-                )}
-                {messages.map((msg) => (
-                    <div key={msg.id}>
-                        <ChatMessage message={msg} />
-                        {msg.isIssue && (
-                            <div className="ml-12 mt-2 flex items-center gap-2">
-                                <Sparkles className="h-5 w-5 text-primary" />
-                                <span className="text-sm font-semibold text-primary">AI Suggestion</span>
-                                {msg.issueUrl ? (
-                                    <Button asChild size="sm" variant="outline">
-                                        <Link href={msg.issueUrl} target="_blank">
-                                            <ExternalLink className="mr-2 h-4 w-4" />
-                                            View Issue
-                                        </Link>
+  // Derive AI-created issues from chat messages (for Kanban intake)
+  const aiIssuesForKanban: Array<Pick<KanbanIssue, 'id' | 'title' | 'summary' | 'priority' | 'assignee'>> = useMemo(() => {
+    const issues: Array<Pick<KanbanIssue, 'id' | 'title' | 'summary' | 'priority' | 'assignee'>> = [];
+    for (const msg of messages) {
+      if (msg.isIssue && msg.issueDetails?.title) {
+        const priority: any = (msg.issueDetails.priority || 'medium').toString().toLowerCase();
+        const normalized: 'high' | 'medium' | 'low' = ['high','medium','low'].includes(priority) ? priority : 'medium';
+        const assigneeName = msg.issueDetails.assignees && msg.issueDetails.assignees.length > 0 ? msg.issueDetails.assignees[0] : undefined;
+        issues.push({
+          id: msg.id,
+          title: msg.issueDetails.title,
+          summary: msg.issueDetails.description || undefined,
+          priority: normalized,
+          assignee: assigneeName ? { name: assigneeName } : undefined,
+        });
+      }
+    }
+    return issues;
+  }, [messages]);
 
-                                    </Button>
-                                ) : (
-                                    <Button 
-                                        size="sm"
-                                        onClick={() => handleCreateIssue(msg)}
-                                        disabled={isCreatingIssue || msg.status === 'completed'}
-                                    >
-                                        <Github className="mr-2 h-4 w-4" />
-                                        {isCreatingIssue ? 'Creating...' : 'Create GitHub Issue'}
-                                    </Button>
-                                )}
-                            </div>
-                        )}
-                        {msg.isSystemMessage && renderSystemMessage(msg)}
-                    </div>
-                ))}
-                {isBotThinking && (
-                     <ChatMessage message={{
-                        id: 'thinking',
-                        sender: 'GitPulse AI',
-                        senderId: 'ai_assistant',
-                        avatarUrl: '/brain-circuit.svg',
-                        text: 'Thinking...',
-                        timestamp: null,
-                    }} />
+  const sidePanelOpen = isKanbanOpen && isMdUp;
+  const sheetOpen = isKanbanOpen && !isMdUp;
+
+  return (
+    <div className="flex flex-col md:flex-row h-[calc(100vh-5rem)] w-full bg-gradient-to-br from-background to-muted/50">
+      {/* Chat panel: full width by default, halves when Kanban is open (desktop) */}
+      <div
+        className={
+          sidePanelOpen
+            ? 'flex flex-col w-full md:w-1/2 transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50'
+            : 'flex flex-col w-full transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50'
+        }
+        style={{ minHeight: 0 }}
+      >
+        {/* Header */}
+        <div className="px-4 py-3 border-b flex items-center justify-between bg-gradient-to-r from-primary/10 to-accent/10 rounded-t-lg">
+          <div className="font-bold text-lg text-primary tracking-wide">Chat</div>
+          <Button variant="outline" size="sm" onClick={() => setIsKanbanOpen(v => !v)} className="font-semibold">
+            <ListTodo className="h-4 w-4 mr-2" />
+            {isKanbanOpen ? 'Hide Kanban' : 'Show Kanban'}
+          </Button>
+        </div>
+        {/* Messages */}
+        <ScrollArea className="flex-1" ref={scrollAreaRef}>
+          <div className="p-2 sm:p-4 space-y-4">
+            {isLoading && messages.length === 0 && (
+              <div className="flex justify-center items-center h-full">
+                <p className="text-muted-foreground font-medium">Loading messages...</p>
+              </div>
+            )}
+            {messages.map((msg) => (
+              <div key={msg.id} className="">
+                {/* Message bubble styling: sender/receiver distinction */}
+                <div className={
+                  msg.senderId === user?.uid
+                    ? 'flex justify-end'
+                    : 'flex justify-start'
+                }>
+                  <div className={
+                    'max-w-[80%] sm:max-w-[70%] md:max-w-[60%] rounded-xl px-4 py-3 shadow-md ' +
+                    (msg.senderId === user?.uid
+                      ? 'bg-primary text-white font-bold border-2 border-primary/30'
+                      : 'bg-accent/30 text-primary font-semibold border-2 border-accent/40')
+                  }>
+                    <ChatMessage message={msg} />
+                  </div>
+                </div>
+                {/* AI issue suggestion and system messages */}
+                {msg.isIssue && (
+                  <div className="ml-8 mt-2 flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    <span className="text-sm font-semibold text-primary">AI Suggestion</span>
+                    {msg.issueUrl ? (
+                      <Button asChild size="sm" variant="outline" className="font-semibold">
+                        <Link href={msg.issueUrl} target="_blank">
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          View Issue
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button 
+                        size="sm"
+                        onClick={() => handleCreateIssue(msg)}
+                        disabled={isCreatingIssue || msg.status === 'completed'}
+                        className="font-semibold"
+                      >
+                        <Github className="mr-2 h-4 w-4" />
+                        {isCreatingIssue ? 'Creating...' : 'Create GitHub Issue'}
+                      </Button>
+                    )}
+                  </div>
                 )}
-            </div>
-      </ScrollArea>
-      <div className="p-4 border-t">
-        <MessageInput onSendMessage={handleSendMessage} disabled={isBotThinking} />
+                {msg.isSystemMessage && renderSystemMessage(msg)}
+              </div>
+            ))}
+            {isBotThinking && (
+              <div className="flex justify-center items-center">
+                <ChatMessage message={{
+                  id: 'thinking',
+                  sender: 'GitPulse AI',
+                  senderId: 'ai_assistant',
+                  avatarUrl: '/brain-circuit.svg',
+                  text: 'Thinking...',
+                  timestamp: null,
+                }} />
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+        {/* Input */}
+        <div className="p-2 sm:p-4 border-t bg-gradient-to-r from-primary/10 to-accent/10 rounded-b-lg">
+          <MessageInput onSendMessage={handleSendMessage} disabled={isBotThinking} repoFullName={repoFullName} />
+        </div>
       </div>
+      {/* Kanban board: desktop (side panel), mobile (Sheet) */}
+      {sidePanelOpen && (
+        <div className="hidden md:flex w-1/2 border-l bg-background rounded-r-lg shadow-lg">
+          <KanbanBoard repoFullName={repoFullName} aiIssues={aiIssuesForKanban} className="w-full h-full" />
+        </div>
+      )}
+      {/* Mobile Kanban as a Sheet */}
+      <Sheet open={sheetOpen} onOpenChange={(open) => setIsKanbanOpen(open)}>
+        <SheetContent side="right" className="w-full sm:max-w-lg md:hidden">
+          <SheetHeader>
+            <SheetTitle>Kanban Board</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            <KanbanBoard repoFullName={repoFullName} aiIssues={aiIssuesForKanban} />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

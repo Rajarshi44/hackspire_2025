@@ -1,10 +1,17 @@
+import Image from 'next/image';
 import { Zap } from 'lucide-react';
 
 export function Logo({ className }: { className?: string }) {
     return (
         <div className={`flex items-center gap-2 ${className}`}>
-            <div className="p-2 bg-primary/10 rounded-lg">
-                <Zap className="h-6 w-6 text-primary" />
+            <div className="relative w-10 h-10">
+                <Image 
+                    src="https://i.postimg.cc/bvnz3hxH/Gemini-Generated-Image-s0q3tjs0q3tjs0q3.png" 
+                    alt="GitPulse Logo" 
+                    fill
+                    className="object-contain"
+                    unoptimized
+                />
             </div>
             <div className="group-data-[collapsible=icon]:hidden">
               <span className="text-xl font-bold tracking-tighter">GitPulse</span>

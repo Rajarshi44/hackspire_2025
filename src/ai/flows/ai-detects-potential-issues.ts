@@ -17,6 +17,7 @@ const DetectIssueInputSchema = z.object({
       text: z.string().describe('The content of the message.'),
     })
   ).describe('The last 10 messages from the chat, including the new message.'),
+  mentions: z.array(z.string()).optional().describe('Array of GitHub usernames mentioned in the message with @ symbol.'),
 });
 export type DetectIssueInput = z.infer<typeof DetectIssueInputSchema>;
 
@@ -25,37 +26,97 @@ const DetectIssueOutputSchema = z.object({
   title: z.string().describe('A concise title for the detected issue.'),
   description: z.string().describe('A detailed description of the issue.'),
   priority: z.enum(['low', 'medium', 'high']).describe('The priority of the issue.'),
+  assignees: z.array(z.string()).optional().describe('Array of GitHub usernames to assign to the issue.'),
 });
 export type DetectIssueOutput = z.infer<typeof DetectIssueOutputSchema>;
 
 export async function aiDetectIssue(input: DetectIssueInput): Promise<DetectIssueOutput> {
-  return aiDetectIssueFlow(input);
+  try {
+    console.log('🤖 aiDetectIssue called with input:', {
+      messagesCount: input.messages?.length,
+      mentionsCount: input.mentions?.length,
+      firstMessage: input.messages?.[0]?.text?.substring(0, 50)
+    });
+    
+    const result = await aiDetectIssueFlow(input);
+    
+    console.log('🤖 aiDetectIssue result:', {
+      is_issue: result.is_issue,
+      title: result.title,
+      priority: result.priority
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('❌ Error in aiDetectIssue:', {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+      input: {
+        messagesCount: input.messages?.length,
+        mentionsCount: input.mentions?.length
+      }
+    });
+    
+    // Return a safe fallback result
+    return {
+      is_issue: false,
+      title: '',
+      description: '',
+      priority: 'low',
+      assignees: []
+    };
+  }
 }
 
 const detectIssuePrompt = ai.definePrompt({
   name: 'detectIssuePrompt',
   input: {schema: DetectIssueInputSchema},
   output: {schema: DetectIssueOutputSchema},
-  prompt: `You are an AI assistant specializing in analyzing chat messages to detect potential software issues or feature requests.
+  prompt: `You are an AI assistant specializing in analyzing informal, natural chat messages to detect potential software issues, bugs, incidents, or feature requests.
 
-  Review the following chat messages and determine if the latest message indicates a new issue or feature request.
+  Review the provided chat history (the messages are in chronological order). Focus on the last few messages to determine whether a new actionable issue should be created. Typical signals that indicate an issue include:
+  - Reports of errors, exceptions, stack traces, or failing tests
+  - Repeated user reports about a broken feature
+  - Requests like "this doesn't work", "we need", "should support", or "please fix"
+  - Performance regressions, crashes, or data loss
 
-  If the message starts with '/issue', you MUST treat it as an issue. The text after '/issue' is the title of the issue.
+  If the user explicitly starts a message with \`/issue\` treat the remainder of that message as the issue title and generate the description from surrounding context.
 
   Chat History:
   {{#each messages}}
   {{sender}}: {{text}}
   {{/each}}
 
-  Based on the last message, respond with a JSON object in the following format:
+  {{#if mentions}}
+  Mentioned users: {{mentions}}
+  If mentions are provided, these users should be included in the 'assignees' list for the issue when appropriate.
+  {{/if}}
+
+  Output requirements:
+  - Return a JSON object matching the schema exactly.
+  - 'is_issue' must be a boolean.
+  - If 'is_issue' is true, fill 'title' with a concise, 6-12 word summary suitable for an issue title, 'description' with a clear reproduction or context (include steps if relevant), 'priority' as one of 'low', 'medium', or 'high'. Include 'assignees' only when mentions are provided or you can confidently map Slack handles to GitHub usernames.
+  - If 'is_issue' is false, set 'is_issue' to false and return empty strings for 'title' and 'description', 'priority' can be 'low', and 'assignees' should be an empty array.
+
+  Example (issue detected):
   {
-  "is_issue": true or false,
-  "title": "Concise title of the issue",
-  "description": "Detailed description of the issue, including steps to reproduce if applicable",
-  "priority": "low", "medium", or "high"
+    "is_issue": true,
+    "title": "API returns 500 when creating user",
+    "description": "Requests to POST /api/users return a 500 error intermittently. Steps: 1) POST payload X; 2) observe 500 with stack trace Y. Occurs on prod for user signups.",
+    "priority": "high",
+    "assignees": ["alice"]
   }
 
-  If the last message does not indicate an issue or feature request, set "is_issue" to false and leave the other fields empty.
+  Example (no issue):
+  {
+    "is_issue": false,
+    "title": "",
+    "description": "",
+    "priority": "low",
+    "assignees": []
+  }
+
+  Based on the last message, respond with the JSON object only. Do not include any additional text.
   `,
 });
 
@@ -66,7 +127,45 @@ const aiDetectIssueFlow = ai.defineFlow(
     outputSchema: DetectIssueOutputSchema,
   },
   async input => {
-    const {output} = await detectIssuePrompt(input);
-    return output!;
+    try {
+      console.log('🔄 aiDetectIssueFlow starting with input:', {
+        messagesCount: input.messages?.length,
+        mentionsCount: input.mentions?.length
+      });
+      
+      const {output} = await detectIssuePrompt(input);
+      
+      console.log('🔄 aiDetectIssueFlow prompt result:', {
+        hasOutput: !!output,
+        outputType: typeof output
+      });
+      
+      if (!output) {
+        console.warn('⚠️ No output from detectIssuePrompt, returning default');
+        return {
+          is_issue: false,
+          title: '',
+          description: '',
+          priority: 'low' as const,
+          assignees: []
+        };
+      }
+      
+      return output;
+    } catch (error) {
+      console.error('❌ Error in aiDetectIssueFlow:', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      // Return safe default
+      return {
+        is_issue: false,
+        title: '',
+        description: '',
+        priority: 'low' as const,
+        assignees: []
+      };
+    }
   }
 );
