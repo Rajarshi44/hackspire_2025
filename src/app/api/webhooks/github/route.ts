@@ -35,28 +35,48 @@ function verifyGitHubSignature(
     return false;
   }
 
-  // GitHub sends signature as "sha256=<hash>"
-  const signatureBuffer = Buffer.from(signature.replace('sha256=', ''), 'hex');
-  const expectedBuffer = Buffer.from(
-    createHmac('sha256', secret).update(payload, 'utf8').digest('hex'),
-    'hex'
-  );
+  try {
+    // GitHub sends signature as "sha256=<hash>"
+    if (!signature.startsWith('sha256=')) {
+      console.error('Invalid signature format (missing sha256= prefix)');
+      return false;
+    }
 
-  // Use timing-safe comparison to prevent timing attacks
-  if (signatureBuffer.length !== expectedBuffer.length) {
-    console.error('Signature length mismatch');
+    const receivedHash = signature.replace('sha256=', '');
+    const expectedHash = createHmac('sha256', secret)
+      .update(payload, 'utf8')
+      .digest('hex');
+
+    console.log('Signature comparison:', {
+      receivedHashPrefix: receivedHash.substring(0, 16) + '...',
+      expectedHashPrefix: expectedHash.substring(0, 16) + '...',
+      receivedLength: receivedHash.length,
+      expectedLength: expectedHash.length,
+      payloadLength: payload.length
+    });
+
+    // Convert to buffers for timing-safe comparison
+    const signatureBuffer = Buffer.from(receivedHash, 'hex');
+    const expectedBuffer = Buffer.from(expectedHash, 'hex');
+
+    // Use timing-safe comparison to prevent timing attacks
+    if (signatureBuffer.length !== expectedBuffer.length) {
+      console.error('Signature length mismatch:', {
+        received: signatureBuffer.length,
+        expected: expectedBuffer.length
+      });
+      return false;
+    }
+
+    const isValid = timingSafeEqual(signatureBuffer, expectedBuffer);
+    
+    console.log('GitHub signature verification result:', isValid);
+
+    return isValid;
+  } catch (error: any) {
+    console.error('Error during signature verification:', error.message);
     return false;
   }
-
-  const isValid = timingSafeEqual(signatureBuffer, expectedBuffer);
-  
-  console.log('GitHub signature verification:', {
-    isValid,
-    signaturePrefix: signature.substring(0, 20) + '...',
-    payloadLength: payload.length
-  });
-
-  return isValid;
 }
 
 // ============================================================================
@@ -72,6 +92,12 @@ async function findMCPJobByPR(
 ): Promise<{ jobId: string; jobData: any } | null> {
   try {
     const db = getFirestore();
+    
+    if (!db || typeof db.collection !== 'function') {
+      console.error('Invalid Firestore instance - collection method not available');
+      return null;
+    }
+    
     const jobsRef = db.collection('repos').doc(repoId).collection('mcp_jobs');
     const querySnapshot = await jobsRef.where('pr_number', '==', prNumber).get();
 
@@ -86,8 +112,8 @@ async function findMCPJobByPR(
       jobId: jobDoc.id,
       jobData: jobDoc.data()
     };
-  } catch (error) {
-    console.error('Error finding MCP job:', error);
+  } catch (error: any) {
+    console.error('Error finding MCP job:', error.message, error.stack);
     return null;
   }
 }
@@ -101,6 +127,12 @@ async function findMCPJobByIssue(
 ): Promise<{ jobId: string; jobData: any } | null> {
   try {
     const db = getFirestore();
+    
+    if (!db || typeof db.collection !== 'function') {
+      console.error('Invalid Firestore instance - collection method not available');
+      return null;
+    }
+    
     const jobsRef = db.collection('repos').doc(repoId).collection('mcp_jobs');
     const querySnapshot = await jobsRef.where('issueNumber', '==', issueNumber).get();
 
@@ -115,8 +147,8 @@ async function findMCPJobByIssue(
       jobId: jobDoc.id,
       jobData: jobDoc.data()
     };
-  } catch (error) {
-    console.error('Error finding MCP job:', error);
+  } catch (error: any) {
+    console.error('Error finding MCP job:', error.message, error.stack);
     return null;
   }
 }
@@ -155,6 +187,13 @@ async function postChatNotification(
 ): Promise<void> {
   try {
     const db = getFirestore();
+    
+    if (!db || typeof db.collection !== 'function') {
+      console.error('Invalid Firestore instance - collection method not available');
+      console.log('Skipping chat notification:', message);
+      return; // Don't throw, just skip
+    }
+    
     const messagesRef = db.collection('repos').doc(repoId).collection('messages');
 
     await messagesRef.add({
@@ -169,9 +208,9 @@ async function postChatNotification(
     });
 
     console.log('Posted chat notification:', message);
-  } catch (error) {
-    console.error('Error posting chat notification:', error);
-    throw error;
+  } catch (error: any) {
+    console.error('Error posting chat notification:', error.message);
+    // Don't throw - notifications are non-critical
   }
 }
 
@@ -587,20 +626,32 @@ export async function POST(req: NextRequest) {
     const event = req.headers.get('x-github-event');
     const delivery = req.headers.get('x-github-delivery');
 
-    console.log('Webhook headers:', {
+    console.log('Webhook debug info:', {
       event,
       delivery,
-      hasSignature: !!signature
+      hasSignature: !!signature,
+      signatureLength: signature?.length || 0,
+      webhookSecretConfigured: !!webhookSecret,
+      webhookSecretLength: webhookSecret?.length || 0
     });
 
     // Get raw body for signature verification
     const rawBody = await req.text();
+    
+    console.log('Request body info:', {
+      bodyLength: rawBody.length,
+      bodyPreview: rawBody.substring(0, 100)
+    });
 
     // Verify signature
     const isValid = verifyGitHubSignature(rawBody, signature, webhookSecret);
 
     if (!isValid) {
-      console.error('❌ GitHub signature verification failed');
+      console.error('❌ GitHub signature verification failed', {
+        receivedSignature: signature,
+        bodyLength: rawBody.length,
+        secretLength: webhookSecret.length
+      });
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 401 }
@@ -692,11 +743,30 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Verify that this is a POST-only endpoint
+// Diagnostic endpoint
 export async function GET() {
-  return NextResponse.json({ 
-    message: 'GitHub webhook endpoint is active',
-    method: 'POST',
-    note: 'This endpoint accepts POST requests from GitHub webhooks'
-  });
+  try {
+    const db = getFirestore();
+    const hasCollection = db && typeof db.collection === 'function';
+    
+    return NextResponse.json({ 
+      message: 'GitHub webhook endpoint is active',
+      method: 'POST',
+      note: 'This endpoint accepts POST requests from GitHub webhooks',
+      diagnostics: {
+        firestoreInitialized: !!db,
+        hasCollectionMethod: hasCollection,
+        webhookSecretConfigured: !!process.env.GITHUB_WEBHOOK_SECRET,
+        firebaseServiceAccountConfigured: !!process.env.FIREBASE_SERVICE_ACCOUNT,
+        useMockFirestore: process.env.USE_MOCK_FIRESTORE === 'true',
+        nodeEnv: process.env.NODE_ENV
+      }
+    });
+  } catch (error: any) {
+    return NextResponse.json({
+      message: 'GitHub webhook endpoint has configuration issues',
+      error: error.message,
+      method: 'POST'
+    }, { status: 500 });
+  }
 }
