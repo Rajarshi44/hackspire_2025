@@ -31,7 +31,41 @@ const DetectIssueOutputSchema = z.object({
 export type DetectIssueOutput = z.infer<typeof DetectIssueOutputSchema>;
 
 export async function aiDetectIssue(input: DetectIssueInput): Promise<DetectIssueOutput> {
-  return aiDetectIssueFlow(input);
+  try {
+    console.log('🤖 aiDetectIssue called with input:', {
+      messagesCount: input.messages?.length,
+      mentionsCount: input.mentions?.length,
+      firstMessage: input.messages?.[0]?.text?.substring(0, 50)
+    });
+    
+    const result = await aiDetectIssueFlow(input);
+    
+    console.log('🤖 aiDetectIssue result:', {
+      is_issue: result.is_issue,
+      title: result.title,
+      priority: result.priority
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('❌ Error in aiDetectIssue:', {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+      input: {
+        messagesCount: input.messages?.length,
+        mentionsCount: input.mentions?.length
+      }
+    });
+    
+    // Return a safe fallback result
+    return {
+      is_issue: false,
+      title: '',
+      description: '',
+      priority: 'low',
+      assignees: []
+    };
+  }
 }
 
 const detectIssuePrompt = ai.definePrompt({
@@ -93,7 +127,45 @@ const aiDetectIssueFlow = ai.defineFlow(
     outputSchema: DetectIssueOutputSchema,
   },
   async input => {
-    const {output} = await detectIssuePrompt(input);
-    return output!;
+    try {
+      console.log('🔄 aiDetectIssueFlow starting with input:', {
+        messagesCount: input.messages?.length,
+        mentionsCount: input.mentions?.length
+      });
+      
+      const {output} = await detectIssuePrompt(input);
+      
+      console.log('🔄 aiDetectIssueFlow prompt result:', {
+        hasOutput: !!output,
+        outputType: typeof output
+      });
+      
+      if (!output) {
+        console.warn('⚠️ No output from detectIssuePrompt, returning default');
+        return {
+          is_issue: false,
+          title: '',
+          description: '',
+          priority: 'low' as const,
+          assignees: []
+        };
+      }
+      
+      return output;
+    } catch (error) {
+      console.error('❌ Error in aiDetectIssueFlow:', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      
+      // Return safe default
+      return {
+        is_issue: false,
+        title: '',
+        description: '',
+        priority: 'low' as const,
+        assignees: []
+      };
+    }
   }
 );

@@ -264,16 +264,44 @@ export class SlackAIService {
 
       // Use AI to detect potential issues
       console.log('🤖 Calling AI detect issue...');
-      const issueDetection = await aiDetectIssue({
-        messages: formattedMessages,
-        mentions: mentions.length > 0 ? mentions : undefined,
-      });
-
-      console.log('🤖 AI detection result:', {
-        is_issue: issueDetection.is_issue,
-        title: issueDetection.title,
-        priority: issueDetection.priority
-      });
+      let issueDetection;
+      try {
+        issueDetection = await aiDetectIssue({
+          messages: formattedMessages,
+          mentions: mentions.length > 0 ? mentions : undefined,
+        });
+        console.log('🤖 AI detection result:', {
+          is_issue: issueDetection.is_issue,
+          title: issueDetection.title,
+          priority: issueDetection.priority
+        });
+      } catch (aiError) {
+        console.error('❌ AI detection failed, trying simple detector:', {
+          error: aiError instanceof Error ? aiError.message : aiError,
+          stack: aiError instanceof Error ? aiError.stack : undefined
+        });
+        
+        // Fallback to simple detector
+        try {
+          const { simpleDetectIssue } = await import('@/ai/flows/simple-issue-detector');
+          issueDetection = await simpleDetectIssue({
+            messages: formattedMessages,
+            mentions: mentions.length > 0 ? mentions : undefined,
+          });
+          console.log('🔍 Simple detector result:', {
+            is_issue: issueDetection.is_issue,
+            title: issueDetection.title,
+            priority: issueDetection.priority
+          });
+        } catch (simpleError) {
+          console.error('❌ Simple detector also failed:', simpleError);
+          // Return safe fallback if all AI fails
+          return {
+            shouldSuggest: false,
+            userHasGitHub: false,
+          };
+        }
+      }
 
       // Check if user has GitHub integration
       console.log('🔗 Checking user GitHub auth...');
@@ -284,8 +312,8 @@ export class SlackAIService {
       console.log('📁 User repositories:', userRepos.length);
 
       const result = {
-        shouldSuggest: issueDetection.is_issue,
-        issueData: issueDetection.is_issue ? issueDetection : undefined,
+        shouldSuggest: issueDetection?.is_issue || false,
+        issueData: issueDetection?.is_issue ? issueDetection : undefined,
         userHasGitHub,
         userRepos,
       };
