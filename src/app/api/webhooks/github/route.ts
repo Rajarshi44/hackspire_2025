@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { getFirestore, doc, updateDoc, serverTimestamp } from '@/lib/server-firestore';
-import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 
 /**
  * GitHub Webhook Handler
@@ -73,9 +72,8 @@ async function findMCPJobByPR(
 ): Promise<{ jobId: string; jobData: any } | null> {
   try {
     const db = getFirestore();
-    const jobsRef = collection(db as any, 'repos', repoId, 'mcp_jobs');
-    const q = query(jobsRef, where('pr_number', '==', prNumber));
-    const querySnapshot = await getDocs(q);
+    const jobsRef = db.collection('repos').doc(repoId).collection('mcp_jobs');
+    const querySnapshot = await jobsRef.where('pr_number', '==', prNumber).get();
 
     if (querySnapshot.empty) {
       console.log(`No MCP job found for PR #${prNumber} in repo ${repoId}`);
@@ -103,9 +101,8 @@ async function findMCPJobByIssue(
 ): Promise<{ jobId: string; jobData: any } | null> {
   try {
     const db = getFirestore();
-    const jobsRef = collection(db as any, 'repos', repoId, 'mcp_jobs');
-    const q = query(jobsRef, where('issueNumber', '==', issueNumber));
-    const querySnapshot = await getDocs(q);
+    const jobsRef = db.collection('repos').doc(repoId).collection('mcp_jobs');
+    const querySnapshot = await jobsRef.where('issueNumber', '==', issueNumber).get();
 
     if (querySnapshot.empty) {
       console.log(`No MCP job found for Issue #${issueNumber} in repo ${repoId}`);
@@ -158,9 +155,9 @@ async function postChatNotification(
 ): Promise<void> {
   try {
     const db = getFirestore();
-    const messagesRef = collection(db as any, 'repos', repoId, 'messages');
+    const messagesRef = db.collection('repos').doc(repoId).collection('messages');
 
-    await addDoc(messagesRef, {
+    await messagesRef.add({
       sender: 'GitPulse AI',
       senderId: 'ai_assistant',
       avatarUrl: '/brain-circuit.svg',
