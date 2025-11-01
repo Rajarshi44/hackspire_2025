@@ -1,5 +1,16 @@
 import * as functions from "firebase-functions";
+import { setGlobalOptions } from "firebase-functions/v2";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onRequest } from "firebase-functions/v2/https";
+import { onDocumentUpdated } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
+import { Request, Response } from "express";
+
+// Set global options for all functions
+setGlobalOptions({
+  maxInstances: 10,
+  region: "us-central1",
+});
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -15,22 +26,24 @@ const db = admin.firestore();
  * 3. Calls the MCP endpoint to generate code
  * 4. Returns the job ID and status to the client
  */
-export const requestAIForIssue = functions.https.onCall(async (data, context) => {
+export const requestAIForIssue = onCall({
+  region: "us-central1",
+}, async (request) => {
   // Validate authentication
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
+  if (!request.auth) {
+    throw new HttpsError(
       "unauthenticated",
       "User must be authenticated to request AI assistance"
     );
   }
 
-  const uid = context.auth.uid;
+  const uid = request.auth.uid;
 
   // Validate required parameters
-  const { repoId, issueId, issueNumber, owner, repo, relatedFiles } = data;
+  const { repoId, issueId, issueNumber, owner, repo, relatedFiles } = request.data;
 
   if (!repoId || !issueId || !issueNumber || !owner || !repo) {
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "invalid-argument",
       "Missing required parameters: repoId, issueId, issueNumber, owner, repo"
     );
@@ -72,7 +85,7 @@ export const requestAIForIssue = functions.https.onCall(async (data, context) =>
         error: "MCP_URL not configured",
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
-      throw new functions.https.HttpsError(
+      throw new HttpsError(
         "internal",
         "MCP service URL not configured"
       );
@@ -139,7 +152,7 @@ export const requestAIForIssue = functions.https.onCall(async (data, context) =>
       issueNumber,
     });
 
-    throw new functions.https.HttpsError(
+    throw new HttpsError(
       "internal",
       `Failed to create MCP job: ${error.message}`
     );
@@ -149,7 +162,9 @@ export const requestAIForIssue = functions.https.onCall(async (data, context) =>
 /**
  * HTTP endpoint for health check
  */
-export const healthCheck = functions.https.onRequest((req, res) => {
+export const healthCheck = onRequest({
+  region: "us-central1",
+}, (req: Request, res: Response) => {
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
@@ -161,28 +176,29 @@ export const healthCheck = functions.https.onRequest((req, res) => {
  * Firestore trigger to monitor MCP job status changes
  * Logs job status updates for debugging and monitoring
  */
-export const onMCPJobUpdate = functions.firestore
-  .document("repos/{repoId}/mcp_jobs/{jobId}")
-  .onUpdate((change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
+export const onMCPJobUpdate = onDocumentUpdated({
+  document: "repos/{repoId}/mcp_jobs/{jobId}",
+  region: "us-central1",
+}, (event) => {
+  const before = event.data?.before.data();
+  const after = event.data?.after.data();
 
-    const { repoId, jobId } = context.params;
+  const { repoId, jobId } = event.params;
 
-    if (before.status !== after.status) {
-      functions.logger.info("MCP job status changed", {
-        repoId,
-        jobId,
-        oldStatus: before.status,
-        newStatus: after.status,
-        issueNumber: after.issueNumber,
-      });
+  if (before?.status !== after?.status) {
+    functions.logger.info("MCP job status changed", {
+      repoId,
+      jobId,
+      oldStatus: before?.status,
+      newStatus: after?.status,
+      issueNumber: after?.issueNumber,
+    });
 
-      // You can add additional logic here, such as:
-      // - Send notifications to users
-      // - Update related documents
-      // - Trigger webhooks
-    }
+    // You can add additional logic here, such as:
+    // - Send notifications to users
+    // - Update related documents
+    // - Trigger webhooks
+  }
 
-    return null;
-  });
+  return null;
+});
