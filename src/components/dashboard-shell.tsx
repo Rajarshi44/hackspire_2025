@@ -1,24 +1,10 @@
 'use client';
 
-import {
-  Sidebar,
-  SidebarProvider,
-  SidebarInset,
-  SidebarHeader,
-  SidebarContent,
-  SidebarTrigger,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from '@/components/ui/sidebar';
+import { Sidebar, SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { UserNav } from '@/components/user-nav';
-import { Logo } from '@/components/logo';
 import { RepoList } from '@/components/repo-list';
 import { Button } from './ui/button';
-import { Bell, UserPlus, ArrowLeft, MessageSquare, Settings } from 'lucide-react';
+import { Bell, UserPlus, ArrowLeft } from 'lucide-react';
 import { Separator } from './ui/separator';
 import { InviteCollaboratorDialog } from './invite-collaborator';
 import { useState } from 'react';
@@ -55,39 +41,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen">
-        <Sidebar collapsible={isRepoView ? "offcanvas" : "icon"}>
-          <SidebarHeader>
-            <Logo />
-          </SidebarHeader>
-          <SidebarContent className="p-0">
-            <SidebarGroup>
-                <SidebarGroupLabel>Repositories</SidebarGroupLabel>
-                <div className="max-h-[60vh] overflow-y-auto">
-                    <RepoList />
-                </div>
-            </SidebarGroup>
-            <SidebarGroup>
-                <SidebarGroupLabel>Integrations</SidebarGroupLabel>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild>
-                      <Link href="/dashboard/slack">
-                        <MessageSquare className="h-4 w-4" />
-                        <span>Slack</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarFooter>
-            {/* Future content for sidebar footer */}
-          </SidebarFooter>
+      <div className="flex min-h-screen bg-black text-white">
+        <Sidebar collapsible={isRepoView ? "offcanvas" : "icon"} className="bg-transparent">
+          <RepoList />
         </Sidebar>
-        <SidebarInset>
-          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background/80 px-4 backdrop-blur-sm sm:px-6">
-            <div className="flex items-center gap-2">
+        <SidebarInset className="bg-black">
+          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b border-white/10 bg-black/80 px-4 backdrop-blur-sm sm:px-6">
+            <div className="flex items-center gap-2 text-white">
               {isRepoView ? (
                   <Link href="/dashboard">
                     <Button variant="ghost" size="icon" className="h-9 w-9 md:hidden">
@@ -98,7 +58,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               ) : (
                 <SidebarTrigger className="md:hidden" />
               )}
-              <h1 className="text-lg font-semibold truncate">{headerTitle}</h1>
+              <h1 className="text-lg font-semibold truncate text-white">{headerTitle}</h1>
             </div>
             <div className="flex items-center gap-2 md:gap-4">
               <div className="flex items-center gap-2 text-sm text-accent font-medium">
@@ -122,7 +82,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <UserNav />
             </div>
           </header>
-          <main className="flex-1">{children}</main>
+          <main className="flex-1 min-h-0 bg-black text-white">{children}</main>
         </SidebarInset>
       </div>
       {repoFullName && <InviteCollaboratorDialog isOpen={isInviteOpen} onOpenChange={setInviteOpen} repoFullName={repoFullName} />}

@@ -16,7 +16,6 @@ import { useToast } from '@/hooks/use-toast';
 import { aiCreateGithubIssue } from '@/ai/flows/ai-creates-github-issues';
 import { aiListGithubIssues } from '@/ai/flows/ai-list-github-issues';
 import { aiListGithubPRs } from '@/ai/flows/ai-list-github-prs';
-import { ScrollArea } from './ui/scroll-area';
 import Link from 'next/link';
 import KanbanBoard, { KanbanIssue } from '@/components/kanban-board';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
@@ -34,6 +33,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
   const [isBotThinking, setIsBotThinking] = useState(false);
   const [isKanbanOpen, setIsKanbanOpen] = useState(false);
   const [isMdUp, setIsMdUp] = useState(false);
+  const gitpulseAvatarUrl = 'https://i.postimg.cc/bvnz3hxH/Gemini-Generated-Image-s0q3tjs0q3tjs0q3.png';
 
   const encodedRepoFullName = encodeURIComponent(repoFullName);
 
@@ -78,11 +78,9 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (scrollAreaRef.current) {
-        const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-        if (viewport) {
-            viewport.scrollTop = viewport.scrollHeight;
-        }
+    const viewport = scrollAreaRef.current;
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
     }
   }, [messages]);
 
@@ -110,7 +108,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
     const botMessage: Omit<Message, 'id' | 'timestamp'> = {
       sender: 'GitPulse AI',
       senderId: 'ai_assistant',
-      avatarUrl: '/brain-circuit.svg',
+      avatarUrl: gitpulseAvatarUrl,
       text: text,
       isSystemMessage: true,
       systemMessageType: type,
@@ -273,10 +271,10 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
 
         // Send AI response about PR verification
         const verificationTempId = `temp_verification_${Date.now()}`;
-        const verificationMessage: Omit<Message, 'id' | 'timestamp'> = {
+      const verificationMessage: Omit<Message, 'id' | 'timestamp'> = {
           sender: 'GitPulse AI',
           senderId: 'ai_assistant',
-          avatarUrl: '/brain-circuit.svg',
+        avatarUrl: gitpulseAvatarUrl,
           text: matchResult.matchFound 
             ? `✅ **PR Verification**: I found ${matchResult.matchingPRs.length} matching pull request${matchResult.matchingPRs.length > 1 ? 's' : ''} for "${resolutionResult.issueReference}"` 
             : `❌ **PR Verification**: No matching pull requests found for "${resolutionResult.issueReference}". ${resolutionResult.resolutionMethod === 'pull_request' ? 'You mentioned creating a PR - it might not be visible yet or may need different keywords.' : ''}`,
@@ -304,10 +302,10 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
       
       if (detectionResult.is_issue) {
           const aiTempId = `temp_ai_${Date.now()}`;
-          const aiMessage: Omit<Message, 'id' | 'timestamp'> = {
+      const aiMessage: Omit<Message, 'id' | 'timestamp'> = {
               sender: 'GitPulse AI',
               senderId: 'ai_assistant',
-              avatarUrl: '/brain-circuit.svg',
+        avatarUrl: gitpulseAvatarUrl,
               text: `I've detected a potential issue: **${detectionResult.title}**${detectionResult.assignees && detectionResult.assignees.length > 0 ? `\n\nSuggested assignees: ${detectionResult.assignees.map(a => `@${a}`).join(', ')}` : ''}`,
               isIssue: true,
               issueDetails: {
@@ -484,91 +482,80 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
   const sheetOpen = isKanbanOpen && !isMdUp;
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-5rem)] w-full bg-gradient-to-br from-background to-muted/50">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden bg-black md:flex-row">
       {/* Chat panel: full width by default, halves when Kanban is open (desktop) */}
       <div
         className={
           sidePanelOpen
-            ? 'flex flex-col w-full md:w-1/2 transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50'
-            : 'flex flex-col w-full transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50'
+            ? 'flex min-h-0 min-w-0 flex-1 flex-col transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50 md:w-1/2'
+            : 'flex min-h-0 min-w-0 flex-1 flex-col transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50'
         }
-        style={{ minHeight: 0 }}
       >
-        {/* Header */}
-        <div className="px-4 py-3 border-b flex items-center justify-between bg-gradient-to-r from-primary/10 to-accent/10 rounded-t-lg">
+  {/* Header */}
+  <div className="sticky top-0 z-10 px-4 py-3 border-b border-border/60 flex items-center justify-between bg-gradient-to-r from-primary/10 to-accent/10 rounded-t-lg backdrop-blur">
           <div className="font-bold text-lg text-primary tracking-wide">Chat</div>
           <Button variant="outline" size="sm" onClick={() => setIsKanbanOpen(v => !v)} className="font-semibold">
             <ListTodo className="h-4 w-4 mr-2" />
-            {isKanbanOpen ? 'Hide Kanban' : 'Show Kanban'}
+            {isKanbanOpen ? 'Hide Kanban Board' : 'Show Kanban Board'}
           </Button>
         </div>
         {/* Messages */}
-        <ScrollArea className="flex-1" ref={scrollAreaRef}>
-          <div className="p-2 sm:p-4 space-y-4">
+        <div ref={scrollAreaRef} className="flex-1 min-h-0 overflow-y-auto">
+          <div className="p-2 sm:p-4 space-y-4 pt-6">
             {isLoading && messages.length === 0 && (
               <div className="flex justify-center items-center h-full">
                 <p className="text-muted-foreground font-medium">Loading messages...</p>
               </div>
             )}
-            {messages.map((msg) => (
-              <div key={msg.id} className="">
-                {/* Message bubble styling: sender/receiver distinction */}
-                <div className={
-                  msg.senderId === user?.uid
-                    ? 'flex justify-end'
-                    : 'flex justify-start'
-                }>
-                  <div className={
-                    'max-w-[80%] sm:max-w-[70%] md:max-w-[60%] rounded-xl px-4 py-3 shadow-md ' +
-                    (msg.senderId === user?.uid
-                      ? 'bg-primary text-white font-bold border-2 border-primary/30'
-                      : 'bg-accent/30 text-primary font-semibold border-2 border-accent/40')
-                  }>
-                    <ChatMessage message={msg} />
-                  </div>
+            {messages.map((msg) => {
+              const isAIMessage = msg.sender === 'GitPulse AI';
+              const displayMessage = isAIMessage ? { ...msg, avatarUrl: gitpulseAvatarUrl } : msg;
+
+              return (
+                <div key={msg.id} className="space-y-2">
+                  <ChatMessage message={displayMessage} />
+                  {msg.isIssue && (
+                    <div className="ml-12 mt-1 flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                      <span className="text-sm font-semibold text-primary">AI Suggestion</span>
+                      {msg.issueUrl ? (
+                        <Button asChild size="sm" variant="outline" className="font-semibold">
+                          <Link href={msg.issueUrl} target="_blank">
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            View Issue
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => handleCreateIssue(msg)}
+                          disabled={isCreatingIssue || msg.status === 'completed'}
+                          className="font-semibold"
+                        >
+                          <Github className="mr-2 h-4 w-4" />
+                          {isCreatingIssue ? 'Creating...' : 'Create GitHub Issue'}
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {msg.isSystemMessage && renderSystemMessage(msg)}
                 </div>
-                {/* AI issue suggestion and system messages */}
-                {msg.isIssue && (
-                  <div className="ml-8 mt-2 flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-primary" />
-                    <span className="text-sm font-semibold text-primary">AI Suggestion</span>
-                    {msg.issueUrl ? (
-                      <Button asChild size="sm" variant="outline" className="font-semibold">
-                        <Link href={msg.issueUrl} target="_blank">
-                          <ExternalLink className="mr-2 h-4 w-4" />
-                          View Issue
-                        </Link>
-                      </Button>
-                    ) : (
-                      <Button 
-                        size="sm"
-                        onClick={() => handleCreateIssue(msg)}
-                        disabled={isCreatingIssue || msg.status === 'completed'}
-                        className="font-semibold"
-                      >
-                        <Github className="mr-2 h-4 w-4" />
-                        {isCreatingIssue ? 'Creating...' : 'Create GitHub Issue'}
-                      </Button>
-                    )}
-                  </div>
-                )}
-                {msg.isSystemMessage && renderSystemMessage(msg)}
-              </div>
-            ))}
+              );
+            })}
             {isBotThinking && (
               <div className="flex justify-center items-center">
                 <ChatMessage message={{
                   id: 'thinking',
                   sender: 'GitPulse AI',
                   senderId: 'ai_assistant',
-                  avatarUrl: '/brain-circuit.svg',
+                  avatarUrl: gitpulseAvatarUrl,
                   text: 'Thinking...',
                   timestamp: null,
                 }} />
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
         {/* Input */}
         <div className="p-2 sm:p-4 border-t bg-gradient-to-r from-primary/10 to-accent/10 rounded-b-lg">
           <MessageInput onSendMessage={handleSendMessage} disabled={isBotThinking} repoFullName={repoFullName} />
@@ -576,8 +563,8 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
       </div>
       {/* Kanban board: desktop (side panel), mobile (Sheet) */}
       {sidePanelOpen && (
-        <div className="hidden md:flex w-1/2 border-l bg-background rounded-r-lg shadow-lg">
-          <KanbanBoard repoFullName={repoFullName} aiIssues={aiIssuesForKanban} className="w-full h-full" />
+        <div className="hidden min-h-0 min-w-0 md:flex md:w-1/2 border-l bg-background rounded-r-lg shadow-lg">
+          <KanbanBoard repoFullName={repoFullName} aiIssues={aiIssuesForKanban} className="h-full w-full" />
         </div>
       )}
       {/* Mobile Kanban as a Sheet */}

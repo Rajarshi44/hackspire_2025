@@ -1,10 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { FolderGit2, MessageSquare, Plus, Settings, Zap, ChevronDown, ChevronRight } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, Hash, Plus, Settings, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useSidebar } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
+import { Logo } from '@/components/logo';
+
+interface Channel {
+  id: string;
+  name: string;
+  unreadCount?: number;
+}
 
 interface Repository {
   id: string;
@@ -13,22 +21,16 @@ interface Repository {
   channels: Channel[];
 }
 
-interface Channel {
-  id: string;
-  name: string;
-  unreadCount?: number;
-}
-
 interface SidebarProps {
   repositories: Repository[];
   activeRepo?: string;
   activeChannel?: string;
   onRepoSelectAction: (repoId: string) => void;
-  onChannelSelectAction: (channelId: string) => void;
+  onChannelSelectAction: (repoId: string, channelId: string) => void;
   onAddChannelAction: (repoId: string) => void;
 }
 
-export function Sidebar({
+export function SlackSidebar({
   repositories,
   activeRepo,
   activeChannel,
@@ -36,143 +38,130 @@ export function Sidebar({
   onChannelSelectAction,
   onAddChannelAction,
 }: SidebarProps) {
-  const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set(activeRepo ? [activeRepo] : []));
+  const { setOpenMobile } = useSidebar();
+  const [expandedRepos, setExpandedRepos] = useState<Set<string>>(
+    () => new Set(activeRepo ? [activeRepo] : [])
+  );
+
+  const activeWorkspaceLabel = useMemo(() => {
+    if (!activeRepo) {
+      return 'GitPulse Workspace';
+    }
+    const repo = repositories.find((entry) => entry.id === activeRepo);
+    return repo ? `${repo.owner}/${repo.name}` : 'GitPulse Workspace';
+  }, [activeRepo, repositories]);
 
   const toggleRepo = (repoId: string) => {
-    const newExpanded = new Set(expandedRepos);
-    if (newExpanded.has(repoId)) {
-      newExpanded.delete(repoId);
+    const next = new Set(expandedRepos);
+    if (next.has(repoId)) {
+      next.delete(repoId);
     } else {
-      newExpanded.add(repoId);
+      next.add(repoId);
     }
-    setExpandedRepos(newExpanded);
+    setExpandedRepos(next);
     onRepoSelectAction(repoId);
   };
 
+  useEffect(() => {
+    if (!activeRepo) return;
+    setExpandedRepos((prev) => {
+      if (prev.has(activeRepo)) return prev;
+      const next = new Set(prev);
+      next.add(activeRepo);
+      return next;
+    });
+  }, [activeRepo]);
+
   return (
-    <div className="flex flex-col h-full w-80 bg-card border-r border-border">
-      {/* Header */}
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 bg-primary/10 border border-primary/20 rounded-lg">
-            <FolderGit2 className="h-6 w-6 text-primary" />
+    <div className="flex h-full w-[--sidebar-width] max-w-full flex-col bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+      <div className="px-4 pt-5 pb-3 border-b border-sidebar-border">
+        <Logo className="text-sidebar-foreground" />
+      </div>
+      <div className="px-4 py-3 border-b border-sidebar-border">
+        <button className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left hover:bg-sidebar-accent/60">
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-sidebar-foreground">{activeWorkspaceLabel}</span>
+            <span className="text-xs text-sidebar-foreground/60">Workspace</span>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-foreground">
-              GitPulse
-            </h1>
-            <p className="text-xs text-muted-foreground">AI-Powered Development</p>
-          </div>
-        </div>
+          <ChevronDown className="h-4 w-4 text-sidebar-foreground/60" />
+        </button>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-3 space-y-4">
-          {/* Repositories Section */}
+        <div className="px-2 py-3 space-y-6">
           <div>
-            <div className="flex items-center justify-between mb-2 px-2">
-              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Repositories
-              </h2>
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted">
+            <div className="flex items-center justify-between px-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/50">
+              <span>Repositories</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+              >
                 <Plus className="h-3 w-3" />
               </Button>
             </div>
-            
-            <div className="space-y-1">
+            <div className="mt-2 space-y-1.5">
               {repositories.map((repo) => {
                 const isExpanded = expandedRepos.has(repo.id);
-                const isActive = activeRepo === repo.id;
-                
+                const isRepoActive = activeRepo === repo.id;
+
                 return (
-                  <div key={repo.id} className="space-y-1">
-                    {/* Repository Header */}
+                  <div key={repo.id}>
                     <button
                       onClick={() => toggleRepo(repo.id)}
                       className={cn(
-                        "w-full flex items-center space-x-2 px-3 py-2.5 text-left transition-colors border",
-                        isActive 
-                          ? "bg-primary/10 border-primary/30 text-foreground" 
-                          : "bg-card border-border hover:bg-muted/50"
+                        'group flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
+                        isRepoActive && 'bg-sidebar-accent text-sidebar-foreground'
                       )}
                     >
                       {isExpanded ? (
-                        <ChevronDown className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <ChevronDown className="h-3 w-3 shrink-0 text-sidebar-foreground/50" />
                       ) : (
-                        <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <ChevronRight className="h-3 w-3 shrink-0 text-sidebar-foreground/50" />
                       )}
-                      <div className="p-1 bg-muted border border-border rounded">
-                        <FolderGit2 className="h-3 w-3 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {repo.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {repo.owner}
-                        </p>
-                      </div>
+                      <span className="truncate">{repo.name}</span>
                     </button>
 
-                    {/* Channels */}
                     {isExpanded && (
-                      <div className="ml-4 space-y-1 border-l border-border pl-2">
+                      <div className="ml-6 mt-1 space-y-0.5 border-l border-sidebar-border pl-3">
                         {repo.channels.map((channel) => {
                           const isChannelActive = activeChannel === channel.id;
-                          
+                          const unread = channel.unreadCount ?? 0;
+
                           return (
                             <button
                               key={channel.id}
-                              onClick={() => onChannelSelectAction(channel.id)}
+                              onClick={() => {
+                                onChannelSelectAction(repo.id, channel.id);
+                                setOpenMobile(false);
+                              }}
                               className={cn(
-                                "w-full flex items-center justify-between px-2 py-1.5 text-left transition-colors border",
-                                isChannelActive
-                                  ? "bg-accent/10 border-accent/30 text-foreground"
-                                  : "bg-card border-border hover:bg-muted/50"
+                                'flex w-full items-center justify-between rounded-md px-2 py-1 text-sm text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
+                                isChannelActive && 'bg-primary/20 text-sidebar-foreground'
                               )}
                             >
-                              <div className="flex items-center space-x-2">
-                                <div className="p-0.5 bg-muted border border-border rounded">
-                                  <MessageSquare className="h-2.5 w-2.5 text-accent" />
-                                </div>
-                                <span className="text-xs font-medium">
-                                  #{channel.name}
+                              <span className="flex items-center gap-2 truncate">
+                                <Hash className="h-3 w-3 text-sidebar-foreground/40" />
+                                <span className="truncate">#{channel.name}</span>
+                              </span>
+                              {unread > 0 && (
+                                <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                                  {unread > 99 ? '99+' : unread}
                                 </span>
-                              </div>
-                              
-                              <div className="flex items-center space-x-1">
-                                {channel.unreadCount && channel.unreadCount > 0 && (
-                                  <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded font-medium border border-primary/30">
-                                    {channel.unreadCount > 99 ? '99+' : channel.unreadCount}
-                                  </span>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onAddChannelAction(repo.id);
-                                  }}
-                                >
-                                  <Plus className="h-2.5 w-2.5" />
-                                </Button>
-                              </div>
+                              )}
                             </button>
                           );
                         })}
-                        
-                        {/* Add Channel Button */}
+
                         <button
-                          onClick={() => onAddChannelAction(repo.id)}
-                          className="w-full flex items-center space-x-2 px-2 py-1.5 text-left transition-colors border border-dashed border-border hover:bg-muted/50 hover:border-accent/50 group"
+                          onClick={() => {
+                            onAddChannelAction(repo.id);
+                            setOpenMobile(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
                         >
-                          <div className="p-0.5 bg-muted border border-border rounded group-hover:border-accent/50">
-                            <Plus className="h-2.5 w-2.5 text-muted-foreground group-hover:text-accent transition-colors" />
-                          </div>
-                          <span className="text-xs text-muted-foreground group-hover:text-accent transition-colors">
-                            Add channel
-                          </span>
+                          <Plus className="h-3 w-3" />
+                          <span>Add channel</span>
                         </button>
                       </div>
                     )}
@@ -182,30 +171,29 @@ export function Sidebar({
             </div>
           </div>
 
-          {/* Integrations Section */}
           <div>
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-2">
+            <div className="px-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-sidebar-foreground/50">
               Integrations
-            </h2>
-            <div className="space-y-1">
-              <div className="flex items-center space-x-3 px-3 py-2 bg-card border border-border">
-                <div className="p-1 bg-primary/10 border border-primary/20 rounded">
-                  <Zap className="h-3 w-3 text-primary" />
+            </div>
+            <div className="mt-2 space-y-1">
+              <div className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent/60">
+                <div className="rounded-md bg-sidebar-accent/60 p-1">
+                  <Zap className="h-3.5 w-3.5 text-accent" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium">Slack</p>
-                  <p className="text-xs text-muted-foreground">Connected</p>
+                  <p className="font-medium text-sidebar-foreground">Slack</p>
+                  <p className="text-xs text-sidebar-foreground/60">Connected</p>
                 </div>
-                <div className="h-2 w-2 bg-accent border border-accent/50 rounded-full" />
+                <span className="h-2 w-2 rounded-full bg-accent" />
               </div>
-              
-              <button className="w-full flex items-center space-x-3 px-3 py-2 bg-card border border-border hover:bg-muted/50 transition-colors">
-                <div className="p-1 bg-muted border border-border rounded">
-                  <Settings className="h-3 w-3 text-muted-foreground" />
+
+              <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/60">
+                <div className="rounded-md bg-sidebar-accent/60 p-1">
+                  <Settings className="h-3.5 w-3.5 text-sidebar-foreground/60" />
                 </div>
                 <div className="flex-1 text-left">
-                  <p className="text-sm font-medium">GitHub</p>
-                  <p className="text-xs text-muted-foreground">Configure</p>
+                  <p className="font-medium text-sidebar-foreground">GitHub</p>
+                  <p className="text-xs text-sidebar-foreground/60">Configure</p>
                 </div>
               </button>
             </div>
@@ -216,35 +204,34 @@ export function Sidebar({
   );
 }
 
-// Sample data for demo
-export const sampleRepositories: Repository[] = [
+export const slackSampleRepositories: Repository[] = [
   {
-    id: "1",
-    name: "frontend-app",
-    owner: "acme-corp",
+    id: 'frontend',
+    name: 'frontend-app',
+    owner: 'acme-corp',
     channels: [
-      { id: "general", name: "general", unreadCount: 3 },
-      { id: "bugs", name: "bugs", unreadCount: 1 },
-      { id: "features", name: "features" },
+      { id: 'frontend-general', name: 'general', unreadCount: 3 },
+      { id: 'frontend-bugs', name: 'bugs', unreadCount: 1 },
+      { id: 'frontend-features', name: 'features' },
     ],
   },
   {
-    id: "2", 
-    name: "api-backend",
-    owner: "acme-corp",
+    id: 'backend',
+    name: 'api-backend',
+    owner: 'acme-corp',
     channels: [
-      { id: "general-2", name: "general" },
-      { id: "deployment", name: "deployment", unreadCount: 2 },
+      { id: 'backend-general', name: 'general' },
+      { id: 'backend-deploy', name: 'deployment', unreadCount: 2 },
     ],
   },
   {
-    id: "3",
-    name: "mobile-app",
-    owner: "acme-corp", 
+    id: 'mobile',
+    name: 'mobile-app',
+    owner: 'acme-corp',
     channels: [
-      { id: "general-3", name: "general" },
-      { id: "ios", name: "ios" },
-      { id: "android", name: "android" },
+      { id: 'mobile-general', name: 'general' },
+      { id: 'mobile-ios', name: 'ios' },
+      { id: 'mobile-android', name: 'android' },
     ],
   },
 ];

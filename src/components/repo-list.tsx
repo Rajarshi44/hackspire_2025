@@ -1,25 +1,12 @@
 'use client';
 
 import { useAuth } from '@/lib/auth';
-import { useEffect, useState } from 'react';
-import { FolderGit2, Plus, Hash, Info } from 'lucide-react';
-import {
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarMenuSkeleton,
-  useSidebar,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
-  SidebarMenuAction,
-} from './ui/sidebar';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { doc, setDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { CreateChannelDialog } from './create-channel-dialog';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+import { SlackSidebar, slackSampleRepositories } from './Sidebar';
 
 type Repo = {
   id: number;
@@ -36,6 +23,7 @@ type Repo = {
 type Channel = {
   id: string;
   name: string;
+  unreadCount?: number;
 };
 
 async function getRepos(token: string): Promise<Repo[]> {
@@ -52,61 +40,26 @@ async function getRepos(token: string): Promise<Repo[]> {
   return response.json();
 }
 
-function RepoChannels({ repoFullName }: { repoFullName: string }) {
-    const firestore = useFirestore();
-    const encodedRepoFullName = encodeURIComponent(repoFullName);
-    const pathname = usePathname();
-    const { setOpenMobile } = useSidebar();
-  
-    const channelsQuery = useMemoFirebase(() => 
-      firestore ? collection(firestore, 'repos', encodedRepoFullName, 'channels') : null,
-      [firestore, encodedRepoFullName]
-    );
-  
-    const { data: channels, isLoading } = useCollection<Channel>(channelsQuery);
-
-    if (isLoading) {
-        return <SidebarMenuSkeleton showIcon={false} />;
-    }
-
-    return (
-        <SidebarMenuSub>
-            {channels?.map(channel => (
-                <SidebarMenuSubItem key={channel.id}>
-                    <Link href={`/dashboard/${repoFullName}/channels/${channel.id}`} legacyBehavior passHref>
-                        <SidebarMenuSubButton 
-                            as="a"
-                            isActive={pathname === `/dashboard/${repoFullName}/channels/${channel.id}`}
-                            onClick={() => setOpenMobile(false)}
-                        >
-                            <Hash />
-                            <span>{channel.name}</span>
-                        </SidebarMenuSubButton>
-                    </Link>
-                </SidebarMenuSubItem>
-            ))}
-        </SidebarMenuSub>
-    )
-}
-
 export function RepoList() {
   const { user, githubToken } = useAuth();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateChannelOpen, setCreateChannelOpen] = useState(false);
   const [selectedRepoForChannel, setSelectedRepoForChannel] = useState<string | null>(null);
-  const [openRepo, setOpenRepo] = useState<string | null>(null);
+  const [expandedRepo, setExpandedRepo] = useState<string | null>(null);
+  const [channelMap, setChannelMap] = useState<Record<string, Channel[]>>({});
+  const [highlightRepo, setHighlightRepo] = useState<string | undefined>();
   
   const pathname = usePathname();
   const router = useRouter();
   const firestore = useFirestore();
-  const { setOpenMobile } = useSidebar();
 
   useEffect(() => {
     const segments = pathname.split('/').filter(Boolean);
     if (segments.length >= 3 && segments[0] === 'dashboard') {
-        const repoFullName = decodeURIComponent(`${segments[1]}/${segments[2]}`);
-        setOpenRepo(repoFullName);
+      const repoFullName = decodeURIComponent(`${segments[1]}/${segments[2]}`);
+      setExpandedRepo(repoFullName);
+      setHighlightRepo(repoFullName);
     }
   }, [pathname]);
 
@@ -157,99 +110,122 @@ export function RepoList() {
     }
   };
 
-  const handleCreateChannelClick = (e: React.MouseEvent, repoFullName: string) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const handleCreateChannelClick = (repoFullName: string) => {
     setSelectedRepoForChannel(repoFullName);
     setCreateChannelOpen(true);
   };
 
-  const handleRepoClick = (repo: Repo) => {
-    handleRepoSelect(repo);
-    router.push(`/dashboard/${repo.full_name}/channels/general`);
-    setOpenMobile(false);
-  }
-  
-  const handleInfoClick = (e: React.MouseEvent, repoFullName: string) => {
-    e.stopPropagation();
-    e.preventDefault();
-    router.push(`/dashboard/${repoFullName}/info`);
-    setOpenMobile(false);
-  }
+  const activeRepoFullName = useMemo(() => {
+    const segments = pathname.split('/').filter(Boolean);
+    if (segments.length >= 3 && segments[0] === 'dashboard') {
+      return decodeURIComponent(`${segments[1]}/${segments[2]}`);
+    }
+    return undefined;
+  }, [pathname]);
 
-  const handleToggleRepo = (repoFullName: string) => {
-    setOpenRepo(prev => prev === repoFullName ? null : repoFullName);
-  }
+  const activeChannelId = useMemo(() => {
+    const segments = pathname.split('/').filter(Boolean);
+    if (segments.length >= 5 && segments[3] === 'channels') {
+      return segments[4];
+    }
+    return undefined;
+  }, [pathname]);
 
+  const encodedExpandedRepo = useMemo(() => (
+    expandedRepo ? encodeURIComponent(expandedRepo) : null
+  ), [expandedRepo]);
+
+  const channelsQuery = useMemoFirebase(() => (
+    firestore && encodedExpandedRepo
+      ? collection(firestore, 'repos', encodedExpandedRepo, 'channels')
+      : null
+  ), [firestore, encodedExpandedRepo]);
+
+  const { data: expandedRepoChannels } = useCollection<Channel>(channelsQuery);
+
+  useEffect(() => {
+    if (!expandedRepo || !expandedRepoChannels) return;
+    setChannelMap((prev) => ({
+      ...prev,
+      [expandedRepo]: expandedRepoChannels,
+    }));
+  }, [expandedRepo, expandedRepoChannels]);
+
+  const sidebarRepositories = useMemo(() => {
+    return repos.map((repo) => ({
+      id: repo.full_name,
+      name: repo.name,
+      owner: repo.owner.login,
+      channels: channelMap[repo.full_name] ?? [],
+    }));
+  }, [repos, channelMap]);
+
+  const handleRepoToggle = (repoId: string) => {
+    const repo = repos.find((entry) => entry.full_name === repoId);
+    const isCurrentlyExpanded = expandedRepo === repoId;
+
+    setExpandedRepo(isCurrentlyExpanded ? null : repoId);
+    setHighlightRepo(repoId);
+
+    if (!isCurrentlyExpanded && repo) {
+      void handleRepoSelect(repo);
+    }
+  };
+
+  const handleChannelSelect = (repoId: string, channelId: string) => {
+    const repo = repos.find((entry) => entry.full_name === repoId);
+    const [fallbackOwner, fallbackRepo] = repoId.split('/');
+    const ownerSegment = encodeURIComponent(repo?.owner.login ?? fallbackOwner ?? repoId);
+    const repoSegment = encodeURIComponent(repo?.name ?? fallbackRepo ?? repoId);
+    const channelSegment = encodeURIComponent(channelId);
+    router.push(`/dashboard/${ownerSegment}/${repoSegment}/channels/${channelSegment}`);
+  };
+
+  const fallbackSidebarData = sidebarRepositories.length ? sidebarRepositories : slackSampleRepositories;
 
   if (loading) {
     return (
-      <div className="p-2 space-y-1">
-        {[...Array(8)].map((_, i) => <SidebarMenuSkeleton key={i} showIcon />)}
-      </div>
+      <SlackSidebar
+        repositories={fallbackSidebarData}
+        activeRepo={activeRepoFullName}
+        activeChannel={activeChannelId}
+        onRepoSelectAction={handleRepoToggle}
+        onChannelSelectAction={handleChannelSelect}
+        onAddChannelAction={handleCreateChannelClick}
+      />
     );
   }
   
-  if (!githubToken) {
-     return (
-       <div className="p-4 text-center text-sm text-muted-foreground">
-         Could not load repositories. Please log in with GitHub to see your repos.
-       </div>
-     )
-  }
-  
-  if (repos.length === 0) {
+  if (!githubToken || repos.length === 0) {
     return (
-      <div className="p-4 text-center text-sm text-muted-foreground">
-        No repositories found.
-      </div>
-    )
+      <SlackSidebar
+        repositories={fallbackSidebarData}
+        activeRepo={activeRepoFullName}
+        activeChannel={activeChannelId}
+        onRepoSelectAction={handleRepoToggle}
+        onChannelSelectAction={handleChannelSelect}
+        onAddChannelAction={handleCreateChannelClick}
+      />
+    );
   }
-
-  const activeRepoFullName = pathname.split('/')[2] && pathname.split('/')[3] ? `${pathname.split('/')[2]}/${pathname.split('/')[3]}` : '';
 
   return (
     <>
-    <SidebarMenu>
-      {repos.map(repo => (
-        <Collapsible asChild key={repo.id} open={openRepo === repo.full_name} onOpenChange={() => handleToggleRepo(repo.full_name)}>
-            <SidebarMenuItem>
-                <div className="flex items-center">
-                    <CollapsibleTrigger asChild>
-                        <SidebarMenuButton
-                            isActive={decodeURIComponent(activeRepoFullName) === repo.full_name && !pathname.includes('/info')}
-                            tooltip={repo.full_name}
-                            className="w-full"
-                            onClick={() => handleRepoClick(repo)}
-                            asChild={false}
-                        >
-                            <FolderGit2 />
-                            <span className="truncate flex-1 text-left">{repo.name}</span>
-                        </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <div className='flex items-center absolute right-0.5'>
-                        <SidebarMenuAction onClick={(e) => handleInfoClick(e, repo.full_name)} tooltip={{children: 'Repository Info'}}>
-                            <Info />
-                        </SidebarMenuAction>
-                        <SidebarMenuAction onClick={(e) => handleCreateChannelClick(e, repo.full_name)} tooltip={{children: 'Create Channel'}}>
-                            <Plus />
-                        </SidebarMenuAction>
-                    </div>
-                </div>
-                <CollapsibleContent>
-                    <RepoChannels repoFullName={repo.full_name} />
-                </CollapsibleContent>
-            </SidebarMenuItem>
-        </Collapsible>
-      ))}
-    </SidebarMenu>
-    {selectedRepoForChannel && (
-        <CreateChannelDialog 
-            isOpen={isCreateChannelOpen}
-            onOpenChange={setCreateChannelOpen}
-            repoFullName={selectedRepoForChannel}
+      <SlackSidebar
+        repositories={sidebarRepositories}
+        activeRepo={highlightRepo ?? activeRepoFullName}
+        activeChannel={activeChannelId}
+        onRepoSelectAction={handleRepoToggle}
+        onChannelSelectAction={handleChannelSelect}
+        onAddChannelAction={handleCreateChannelClick}
+      />
+      {selectedRepoForChannel && (
+        <CreateChannelDialog
+          isOpen={isCreateChannelOpen}
+          onOpenChange={setCreateChannelOpen}
+          repoFullName={selectedRepoForChannel}
         />
-    )}
+      )}
     </>
   );
 }
