@@ -268,26 +268,29 @@ export class SlackUserService {
   /**
    * Fetch issues for a repository
    */
-  async getIssuesForRepository(repoName: string): Promise<{ number: number; title: string }[]> {
-    console.log('Fetching issues for repository:', repoName);
+  async getIssuesForRepository(repoName: string, slackUserId?: string): Promise<{ number: number; title: string }[]> {
+    console.log('Fetching issues for repository:', repoName, { slackUserId });
     try {
-      // Try to use a PAT from env if available as a fallback
-      const fallbackToken = process.env.GITHUB_FALLBACK_TOKEN || null;
+      // Prefer per-user token when available
+      let token: string | null = null;
+      if (slackUserId) {
+        token = await this.getGitHubToken(slackUserId);
+      }
+      // Fallback to env PAT if no user token
+      if (!token) {
+        token = process.env.GITHUB_FALLBACK_TOKEN || null;
+      }
 
       // repoName expected in form 'owner/repo'
       const url = `https://api.github.com/repos/${repoName}/issues?per_page=30&state=all`;
-
-      // If repo is specified as full name, we may not have a user token here — try to find owner token
-      // For now, prefer the fallback token when user-scoped token is not available
-      // The caller may pass repoName only; token resolution is best-effort
 
       const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json',
         'User-Agent': 'GitPulse-Bot/1.0'
       };
 
-      if (fallbackToken) {
-        headers['Authorization'] = `Bearer ${fallbackToken}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const resp = await fetch(url, { headers });
@@ -312,18 +315,24 @@ export class SlackUserService {
   /**
    * Fetch pull requests for a repository
    */
-  async getPullRequestsForRepository(repoName: string): Promise<{ number: number; title: string; state: string }[]> {
-    console.log('Fetching pull requests for repository:', repoName);
+  async getPullRequestsForRepository(repoName: string, slackUserId?: string): Promise<{ number: number; title: string; state: string }[]> {
+    console.log('Fetching pull requests for repository:', repoName, { slackUserId });
     try {
-      const fallbackToken = process.env.GITHUB_FALLBACK_TOKEN || null;
-      const url = `https://api.github.com/repos/${repoName}/pulls?per_page=30&state=all`;
+      let token: string | null = null;
+      if (slackUserId) {
+        token = await this.getGitHubToken(slackUserId);
+      }
+      if (!token) {
+        token = process.env.GITHUB_FALLBACK_TOKEN || null;
+      }
 
+      const url = `https://api.github.com/repos/${repoName}/pulls?per_page=30&state=all`;
       const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json',
         'User-Agent': 'GitPulse-Bot/1.0'
       };
-      if (fallbackToken) {
-        headers['Authorization'] = `Bearer ${fallbackToken}`;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const resp = await fetch(url, { headers });
