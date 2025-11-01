@@ -372,6 +372,41 @@ export class SlackUserService {
   }
 
   /**
+   * Get user's current default repository
+   */
+  async getCurrentRepository(slackUserId: string): Promise<string | null> {
+    try {
+      const userData = await this.getUserData(slackUserId);
+      return userData?.default_repository || null;
+    } catch (error) {
+      console.error('Error getting current repository:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Disconnect user's GitHub authentication
+   */
+  async disconnectGitHubAuth(slackUserId: string): Promise<void> {
+    try {
+      const userRef = doc(this.db, 'slack_users', slackUserId);
+      
+      // Update document to remove GitHub authentication data
+      await updateDoc(userRef, {
+        github_token: null,
+        github_user: null,
+        default_repository: null,
+        last_activity: new Date(),
+      });
+
+      console.log('GitHub auth disconnected for user:', slackUserId);
+    } catch (error) {
+      console.error('Error disconnecting GitHub auth:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Create a GitHub issue in the specified repository using the user's GitHub token
    */
   async createIssueForRepository(repoName: string, title: string, body: string, slackUserId: string): Promise<{ number: number; url: string; title: string } | null> {

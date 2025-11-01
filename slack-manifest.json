@@ -1,90 +1,50 @@
 {
-  "display_information": {
-    "name": "GitPulse",
-    "description": "AI assistant that analyzes channels, suggests fixes, and helps create GitHub issues.",
-    "background_color": "#2EB67D"
-  },
-  "features": {
-    "bot_user": {
-      "display_name": "GitPulse",
-      "always_online": false
+    "display_information": {
+        "name": "GitPulse",
+        "description": "AI assistant that analyzes channels, suggests fixes, and helps create GitHub issues.",
+        "background_color": "#2EB67D"
     },
-    "slash_commands": [
-      {
-        "command": "/gitpulse",
-        "url": "https://devx-rho.vercel.app/api/slack/commands",
-        "description": "GitPulse AI assistant",
-        "usage_hint": "analyze | create-issue | list-issues | list-prs | match-pr | suggest-fix | detect-potential | detect-resolution"
-      },
-      {
-        "command": "/gitpulse_analyze",
-        "url": "https://devx-rho.vercel.app/api/slack/commands/analyze",
-        "description": "Analyze recent channel messages for potential issues",
-        "usage_hint": "analyze"
-      },
-      {
-        "command": "/gitpulse_create-issue",
-        "url": "https://devx-rho.vercel.app/api/slack/commands/create-issue",
-        "description": "Create a new GitHub issue",
-        "usage_hint": "create_issue_with_natural_language"
-      },
-      {
-        "command": "/gitpulse_issuelist",
-        "url": "https://devx-rho.vercel.app/api/slack/commands/issuelist",
-        "description": "List issues in your repository",
-        "usage_hint": "issue"
-      },
-      {
-        "command": "/gitpulse_prlist",
-        "url": "https://devx-rho.vercel.app/api/slack/commands/prlist",
-        "description": "List pull requests in your repository",
-        "usage_hint": "d"
-      },
-      {
-        "command": "/gitpulse_assign",
-        "url": "https://devx-rho.vercel.app/api/slack/commands/assign",
-        "description": "Assign an issue to MCP",
-        "usage_hint": "<issueId>"
-      },
-      {
-        "command": "/gitpulse_status",
-        "url": "https://devx-rho.vercel.app/api/slack/commands/status",
-        "description": "Check bot configuration status",
-        "usage_hint": "f"
-      },
-      {
-        "command": "/gitpulse_help",
-        "url": "https://devx-rho.vercel.app/api/slack/commands/help",
-        "description": "Show help information for GitPulse commands",
-        "usage_hint": "ff"
-      }
-    ]
-  },
-  "oauth_config": {
-    "scopes": {
-      "bot": [
-        "commands",
-        "chat:write",
-        "channels:history",
-        "channels:read",
-        "users:read",
-        "app_mentions:read"
-      ]
+    "features": {
+        "bot_user": {
+            "display_name": "GitPulse",
+            "always_online": false
+        },
+        "slash_commands": [
+            {
+                "command": "/gitpulse",
+                "url": "https://devx-rho.vercel.app/api/slack/commands",
+                "description": "GitPulse AI assistant",
+                "usage_hint": "analyze | create-issue | issuelist | prlist | assign | switchrepo | logout | status | help",
+                "should_escape": false
+            }
+        ]
+    },
+    "oauth_config": {
+        "scopes": {
+            "bot": [
+                "commands",
+                "chat:write",
+                "channels:history",
+                "channels:read",
+                "users:read",
+                "app_mentions:read"
+            ]
+        }
+    },
+    "settings": {
+        "event_subscriptions": {
+            "request_url": "https://devx-rho.vercel.app/api/slack/events",
+            "bot_events": [
+                "app_mention",
+                "message.channels"
+            ]
+        },
+        "interactivity": {
+            "is_enabled": true,
+            "request_url": "https://devx-rho.vercel.app/api/slack/interactions"
+        },
+        "org_deploy_enabled": false,
+        "socket_mode_enabled": false,
+        "token_rotation_enabled": false
     }
-  },
-  "settings": {
-    "interactivity": {
-      "is_enabled": true,
-      "request_url": "https://devx-rho.vercel.app/api/slack/interactions"
-    },
-    "event_subscriptions": {
-      "request_url": "https://devx-rho.vercel.app/api/slack/events",
-      "bot_events": [
-        "app_mention",
-        "message.channels"
-      ]
-    },
-    "org_deploy_enabled": false,
-    "is_hosted": false
-  }
 }

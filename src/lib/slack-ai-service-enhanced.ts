@@ -208,12 +208,43 @@ export class SlackAIService {
     userHasGitHub: boolean;
     userRepos?: string[];
   }> {
+    console.log('🔍 Starting autoAnalyzeMessage:', {
+      channelId,
+      messageLength: messageText?.length,
+      userId,
+      messagePreview: messageText?.substring(0, 100)
+    });
+
     try {
-      // Get recent messages including the new one
-      const messages = await this.getChannelHistory(channelId, 5);
+      // Simple check for common issue keywords first
+      const issueKeywords = ['bug', 'error', 'broken', 'fix', 'issue', 'problem', 'crash', 'feature', 'add', 'need', 'should', 'lets', "let's", 'can we', 'todo', 'implement'];
+      const hasIssueKeywords = issueKeywords.some(keyword => 
+        messageText.toLowerCase().includes(keyword.toLowerCase())
+      );
+
+      console.log('📝 Issue keywords check:', {
+        hasIssueKeywords,
+        messageText: messageText.toLowerCase()
+      });
+
+      // If no issue keywords, skip AI analysis for performance
+      if (!hasIssueKeywords) {
+        console.log('⏭️ No issue keywords found, skipping AI analysis');
+        return {
+          shouldSuggest: false,
+          userHasGitHub: false,
+        };
+      }
+
+      // Get recent messages for context
+      console.log('📚 Fetching channel history...');
+      const messages = await this.getChannelHistory(channelId, 3);
+      console.log('📚 Channel history fetched:', messages.length, 'messages');
       
       // Add the current message to analysis
       const userInfo = await this.getUserInfo(userId);
+      console.log('👤 User info fetched:', userInfo.name || userInfo.id);
+      
       const formattedMessages = await Promise.all(
         [...messages, { text: messageText, user: userId, ts: Date.now().toString(), channel: channelId }]
         .map(async (msg) => {
@@ -225,27 +256,51 @@ export class SlackAIService {
         })
       );
 
+      console.log('💬 Formatted messages for AI:', formattedMessages.length);
+
       // Extract GitHub mentions
       const mentions = this.extractGitHubMentions(messageText);
+      console.log('👥 GitHub mentions extracted:', mentions);
 
       // Use AI to detect potential issues
+      console.log('🤖 Calling AI detect issue...');
       const issueDetection = await aiDetectIssue({
         messages: formattedMessages,
         mentions: mentions.length > 0 ? mentions : undefined,
       });
 
-      // Check if user has GitHub integration
-      const userHasGitHub = await this.checkUserGitHubAuth(userId);
-      const userRepos = userHasGitHub ? await this.getUserRepositories(userId) : [];
+      console.log('🤖 AI detection result:', {
+        is_issue: issueDetection.is_issue,
+        title: issueDetection.title,
+        priority: issueDetection.priority
+      });
 
-      return {
+      // Check if user has GitHub integration
+      console.log('🔗 Checking user GitHub auth...');
+      const userHasGitHub = await this.checkUserGitHubAuth(userId);
+      console.log('🔗 User has GitHub:', userHasGitHub);
+      
+      const userRepos = userHasGitHub ? await this.getUserRepositories(userId) : [];
+      console.log('📁 User repositories:', userRepos.length);
+
+      const result = {
         shouldSuggest: issueDetection.is_issue,
         issueData: issueDetection.is_issue ? issueDetection : undefined,
         userHasGitHub,
         userRepos,
       };
+
+      console.log('✅ autoAnalyzeMessage completed:', result);
+      return result;
     } catch (error) {
-      console.error('Error in auto-analyze message:', error);
+      console.error('❌ Error in auto-analyze message:', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        channelId,
+        userId,
+        messageText: messageText?.substring(0, 100)
+      });
+      
       return {
         shouldSuggest: false,
         userHasGitHub: false,
@@ -263,8 +318,17 @@ export class SlackAIService {
     userHasGitHub: boolean,
     userRepos: string[] = []
   ): Promise<boolean> {
+    console.log('📤 Sending issue suggestion:', {
+      channelId,
+      userId,
+      userHasGitHub,
+      userReposCount: userRepos.length,
+      issueTitle: issueData?.title
+    });
+
     try {
       if (!userHasGitHub) {
+        console.log('🔗 User needs GitHub authentication');
         // User needs to authenticate with GitHub
         const blocks = [
           {
@@ -285,7 +349,7 @@ export class SlackAIService {
                 },
                 action_id: 'connect_github',
                 style: 'primary',
-                url: `${process.env.NEXTAUTH_URL}/auth/github?redirect=slack&user_id=${userId}`
+                url: `${process.env.NEXTAUTH_URL || process.env.VERCEL_URL || 'http://localhost:3000'}/auth/github?redirect=slack&user_id=${userId}`
               },
               {
                 type: 'button',
@@ -303,6 +367,7 @@ export class SlackAIService {
       }
 
       if (userRepos.length === 0) {
+        console.log('📁 User has GitHub but no repos');
         // User has GitHub but no repos configured
         const blocks = [
           {
@@ -339,6 +404,7 @@ export class SlackAIService {
         return await this.sendMessage(channelId, 'GitHub issue detected - select repository', blocks);
       }
 
+      console.log('✅ User ready for direct issue creation');
       // User has GitHub and repos - show direct creation option
       const blocks = [
         {
@@ -378,10 +444,30 @@ export class SlackAIService {
         }
       ];
 
-      return await this.sendMessage(channelId, 'GitHub issue detected', blocks);
+      const result = await this.sendMessage(channelId, 'GitHub issue detected', blocks);
+      console.log('📤 Issue suggestion message sent:', result);
+      return result;
     } catch (error) {
-      console.error('Error sending issue suggestion:', error);
-      return false;
+      console.error('❌ Error sending issue suggestion:', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        channelId,
+        userId
+      });
+      
+      // Fallback: send a simple text message
+      try {
+        console.log('🔄 Trying fallback message...');
+        const fallbackResult = await this.sendMessage(
+          channelId, 
+          `🤖 I detected a potential issue: "${issueData?.title || 'Unknown'}" - but had trouble creating the interactive message. Please use /gitpulse commands to create issues manually.`
+        );
+        console.log('🔄 Fallback message sent:', fallbackResult);
+        return fallbackResult;
+      } catch (fallbackError) {
+        console.error('❌ Fallback message also failed:', fallbackError);
+        return false;
+      }
     }
   }
 
@@ -389,24 +475,77 @@ export class SlackAIService {
    * Send a message to a Slack channel or user
    */
   async sendMessage(channel: string, text: string, blocks?: any[]): Promise<boolean> {
+    console.log('📨 Sending Slack message:', {
+      channel,
+      textLength: text?.length,
+      hasBlocks: !!blocks,
+      blocksCount: blocks?.length || 0,
+      botTokenExists: !!this.botToken,
+      botTokenLength: this.botToken?.length || 0
+    });
+
     try {
+      const payload = {
+        channel,
+        text,
+        ...(blocks && { blocks })
+      };
+
+      console.log('📨 Slack API payload:', {
+        channel: payload.channel,
+        textPreview: payload.text?.substring(0, 100),
+        hasBlocks: !!payload.blocks
+      });
+
       const response = await fetch('https://slack.com/api/chat.postMessage', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.botToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          channel,
-          text,
-          blocks,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      console.log('📨 Slack API response:', {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        responseLength: responseText.length,
+        responsePreview: responseText.substring(0, 200)
+      });
+
+      if (!response.ok) {
+        console.error('❌ Slack API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          response: responseText
+        });
+        return false;
+      }
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ Failed to parse Slack response as JSON:', parseError);
+        return false;
+      }
+
+      console.log('📨 Slack API parsed response:', {
+        ok: data.ok,
+        error: data.error,
+        warning: data.warning
+      });
+
       return data.ok;
     } catch (error) {
-      console.error('Error sending Slack message:', error);
+      console.error('❌ Error sending Slack message:', {
+        error: error instanceof Error ? error.message : error,
+        stack: error instanceof Error ? error.stack : undefined,
+        channel,
+        textLength: text?.length
+      });
       return false;
     }
   }

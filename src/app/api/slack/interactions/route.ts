@@ -37,68 +37,87 @@ export async function POST(req: NextRequest) {
     if (payload.type === 'block_actions') {
       const action = payload.actions?.[0];
       
-      // Repository selection from dropdown
-      if (action?.action_id === 'select_repository') {
-        const selectedRepo = action.selected_option?.value;
-        console.log('Repository selected:', selectedRepo);
+      // Direct repository selection for issue creation
+      if (action?.action_id === 'create_issue_in_repo') {
+        const selectedRepo = action.value;
+        console.log('Direct repository selection for issue creation:', selectedRepo);
         
-        return NextResponse.json({
-          response_type: 'ephemeral',
-          replace_original: true,
-          text: '📝 Repository Selected',
+        // Open a modal for issue details
+        const modalView = {
+          type: 'modal',
+          callback_id: 'create_issue_modal',
+          title: {
+            type: 'plain_text',
+            text: 'Create GitHub Issue'
+          },
+          submit: {
+            type: 'plain_text',
+            text: 'Create Issue'
+          },
+          close: {
+            type: 'plain_text',
+            text: 'Cancel'
+          },
+          private_metadata: JSON.stringify({ repository: selectedRepo }),
           blocks: [
             {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `📁 **Selected Repository:** \`${selectedRepo}\`\n\n📝 Now provide the issue details:`
+                text: `📁 *Repository:* \`${selectedRepo}\`\n\n📝 Fill in the issue details below:`
               }
             },
             {
               type: 'input',
-              block_id: 'issue_title_block',
+              block_id: 'issue_title',
+              label: {
+                type: 'plain_text',
+                text: 'Issue Title *'
+              },
               element: {
                 type: 'plain_text_input',
-                action_id: 'issue_title_input',
+                action_id: 'title',
                 placeholder: {
                   type: 'plain_text',
                   text: 'e.g., Fix login bug on mobile devices'
                 }
-              },
-              label: {
-                type: 'plain_text',
-                text: 'Issue Title *'
               }
             },
             {
               type: 'input',
-              block_id: 'issue_description_block',
+              block_id: 'issue_description',
+              label: {
+                type: 'plain_text',
+                text: 'Issue Description'
+              },
               element: {
                 type: 'plain_text_input',
-                action_id: 'issue_description_input',
+                action_id: 'description',
                 multiline: true,
                 placeholder: {
                   type: 'plain_text',
                   text: 'Describe the issue, steps to reproduce, expected behavior, etc.'
                 }
               },
-              label: {
-                type: 'plain_text',
-                text: 'Issue Description'
-              }
+              optional: true
             },
             {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: '*Priority Level:*'
+              type: 'input',
+              block_id: 'issue_priority',
+              label: {
+                type: 'plain_text',
+                text: 'Priority Level'
               },
-              accessory: {
+              element: {
                 type: 'static_select',
-                action_id: 'issue_priority_select',
+                action_id: 'priority',
                 placeholder: {
                   type: 'plain_text',
                   text: 'Select priority...'
+                },
+                initial_option: {
+                  text: { type: 'plain_text', text: '🟡 Medium Priority' },
+                  value: 'medium'
                 },
                 options: [
                   {
@@ -114,33 +133,176 @@ export async function POST(req: NextRequest) {
                     value: 'low'
                   }
                 ]
+              },
+              optional: true
+            }
+          ]
+        };
+
+        // Open the modal
+        try {
+          const response = await fetch('https://slack.com/api/views.open', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              trigger_id: payload.trigger_id,
+              view: modalView
+            })
+          });
+
+          if (response.ok) {
+            return NextResponse.json({ ok: true });
+          } else {
+            console.error('Failed to open modal:', await response.text());
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: '❌ Failed to open issue creation form. Please try again.'
+            });
+          }
+        } catch (error) {
+          console.error('Error opening modal:', error);
+          return NextResponse.json({
+            response_type: 'ephemeral',
+            text: '❌ Failed to open issue creation form. Please try again.'
+          });
+        }
+      }
+
+      // Repository selection from dropdown for issue creation
+      if (action?.action_id === 'select_repository_for_issue') {
+        const selectedRepo = action.selected_option?.value;
+        console.log('Repository selected for issue creation:', selectedRepo);
+        
+        // Open a modal for issue details
+        const modalView = {
+          type: 'modal',
+          callback_id: 'create_issue_modal',
+          title: {
+            type: 'plain_text',
+            text: 'Create GitHub Issue'
+          },
+          submit: {
+            type: 'plain_text',
+            text: 'Create Issue'
+          },
+          close: {
+            type: 'plain_text',
+            text: 'Cancel'
+          },
+          private_metadata: JSON.stringify({ repository: selectedRepo }),
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `📁 *Repository:* \`${selectedRepo}\`\n\n📝 Fill in the issue details below:`
               }
             },
             {
-              type: 'actions',
-              elements: [
-                {
-                  type: 'button',
-                  text: {
-                    type: 'plain_text',
-                    text: '🚀 Create Issue'
-                  },
-                  action_id: 'create_issue_submit',
-                  style: 'primary',
-                  value: JSON.stringify({ repository: selectedRepo })
-                },
-                {
-                  type: 'button',
-                  text: {
-                    type: 'plain_text',
-                    text: '↩️ Back to Repository Selection'
-                  },
-                  action_id: 'back_to_repo_selection'
+              type: 'input',
+              block_id: 'issue_title',
+              label: {
+                type: 'plain_text',
+                text: 'Issue Title *'
+              },
+              element: {
+                type: 'plain_text_input',
+                action_id: 'title',
+                placeholder: {
+                  type: 'plain_text',
+                  text: 'e.g., Fix login bug on mobile devices'
                 }
-              ]
+              }
+            },
+            {
+              type: 'input',
+              block_id: 'issue_description',
+              label: {
+                type: 'plain_text',
+                text: 'Issue Description'
+              },
+              element: {
+                type: 'plain_text_input',
+                action_id: 'description',
+                multiline: true,
+                placeholder: {
+                  type: 'plain_text',
+                  text: 'Describe the issue, steps to reproduce, expected behavior, etc.'
+                }
+              },
+              optional: true
+            },
+            {
+              type: 'input',
+              block_id: 'issue_priority',
+              label: {
+                type: 'plain_text',
+                text: 'Priority Level'
+              },
+              element: {
+                type: 'static_select',
+                action_id: 'priority',
+                placeholder: {
+                  type: 'plain_text',
+                  text: 'Select priority...'
+                },
+                initial_option: {
+                  text: { type: 'plain_text', text: '🟡 Medium Priority' },
+                  value: 'medium'
+                },
+                options: [
+                  {
+                    text: { type: 'plain_text', text: '🔴 High Priority' },
+                    value: 'high'
+                  },
+                  {
+                    text: { type: 'plain_text', text: '🟡 Medium Priority' },
+                    value: 'medium'
+                  },
+                  {
+                    text: { type: 'plain_text', text: '🟢 Low Priority' },
+                    value: 'low'
+                  }
+                ]
+              },
+              optional: true
             }
           ]
-        });
+        };
+
+        // Open the modal
+        try {
+          const response = await fetch('https://slack.com/api/views.open', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              trigger_id: payload.trigger_id,
+              view: modalView
+            })
+          });
+
+          if (response.ok) {
+            return NextResponse.json({ ok: true });
+          } else {
+            console.error('Failed to open modal:', await response.text());
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: '❌ Failed to open issue creation form. Please try again.'
+            });
+          }
+        } catch (error) {
+          console.error('Error opening modal:', error);
+          return NextResponse.json({
+            response_type: 'ephemeral',
+            text: '❌ Failed to open issue creation form. Please try again.'
+          });
+        }
       }
 
       // Handle issue creation submission
@@ -286,78 +448,104 @@ export async function POST(req: NextRequest) {
 
     // Handle view_submission (modal submitted)
     if (payload.type === 'view_submission') {
-      // Extract fields from the view state
-      const values = payload.view?.state?.values || {};
-      // Example: find title and description fields
-      let title = '';
-      let description = '';
-      for (const blockId in values) {
-        for (const actionId in values[blockId]) {
-          const val = values[blockId][actionId];
-          if (actionId === 'title' && val?.value) title = val.value;
-          if (actionId === 'description' && val?.value) description = val.value;
-        }
-      }
-
-      // Determine repository from private_metadata
-      let repository = '';
-      try {
-        const meta = payload.view?.private_metadata;
-        if (meta) {
-          const parsed = JSON.parse(meta);
-          repository = parsed.repository;
-        }
-      } catch (e) {
-        // ignore
-      }
-
-      if (!repository) {
-        return NextResponse.json({
-          response_action: 'update',
-          view: {
-            type: 'modal',
-            title: { type: 'plain_text', text: 'Issue Creation Failed' },
-            blocks: [
-              { type: 'section', text: { type: 'mrkdwn', text: '❌ Repository not specified. Please try again.' } }
-            ]
+      console.log('Modal submission received:', payload.view?.callback_id);
+      
+      if (payload.view?.callback_id === 'create_issue_modal') {
+        try {
+          // Extract fields from the view state
+          const values = payload.view?.state?.values || {};
+          
+          const title = values.issue_title?.title?.value || 'New issue from GitPulse';
+          const description = values.issue_description?.description?.value || '';
+          const priority = values.issue_priority?.priority?.selected_option?.value || 'medium';
+          
+          // Get repository from private_metadata
+          let repository = '';
+          try {
+            const meta = payload.view?.private_metadata;
+            if (meta) {
+              const parsed = JSON.parse(meta);
+              repository = parsed.repository;
+            }
+          } catch (e) {
+            console.error('Error parsing private_metadata:', e);
           }
-        });
-      }
 
-      try {
-        const { slackUserService } = await import('@/lib/slack-user-service');
-        const userId = payload.user?.id || '';
-        const created = await slackUserService.createIssueForRepository(repository, title || 'New issue from GitPulse', description || '', userId);
+          if (!repository) {
+            return NextResponse.json({
+              response_action: 'errors',
+              errors: {
+                'issue_title': 'Repository not specified. Please try again.'
+              }
+            });
+          }
 
-        if (!created) {
+          console.log('Creating GitHub issue:', { repository, title, priority, userId });
+
+          // Create the issue
+          const { slackUserService } = await import('@/lib/slack-user-service');
+          
+          // Add priority to description if specified
+          let fullDescription = description;
+          if (priority && priority !== 'medium') {
+            const priorityLabel = priority === 'high' ? '🔴 HIGH PRIORITY' : priority === 'low' ? '🟢 Low Priority' : '🟡 Medium Priority';
+            fullDescription = `**Priority:** ${priorityLabel}\n\n${description}`;
+          }
+          
+          const created = await slackUserService.createIssueForRepository(repository, title, fullDescription, userId);
+
+          if (!created) {
+            return NextResponse.json({
+              response_action: 'errors',
+              errors: {
+                'issue_title': 'Failed to create issue. Check your GitHub permissions and try again.'
+              }
+            });
+          }
+
+          console.log('GitHub issue created successfully:', created);
+
+          // Send a follow-up message to the user
+          try {
+            await fetch('https://slack.com/api/chat.postEphemeral', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                channel: channelId,
+                user: userId,
+                text: `✅ GitHub issue created successfully!`,
+                blocks: [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: `✅ *Issue Created Successfully!*\n\n🔗 <${created.url}|#${created.number} - ${created.title}>\n📁 Repository: \`${repository}\`\n🏷️ Priority: ${priority === 'high' ? '🔴 High' : priority === 'low' ? '🟢 Low' : '🟡 Medium'}`
+                    }
+                  }
+                ]
+              })
+            });
+          } catch (msgError) {
+            console.error('Failed to send follow-up message:', msgError);
+          }
+
+          // Close modal
           return NextResponse.json({
-            response_action: 'update',
-            view: {
-              type: 'modal',
-              title: { type: 'plain_text', text: 'Issue Creation Failed' },
-              blocks: [
-                { type: 'section', text: { type: 'mrkdwn', text: '❌ Failed to create issue. Ensure your GitHub account is connected and try again.' } }
-              ]
+            response_action: 'clear'
+          });
+          
+        } catch (error) {
+          console.error('Error creating issue from modal submission:', error);
+          return NextResponse.json({
+            response_action: 'errors',
+            errors: {
+              'issue_title': 'An error occurred while creating the issue. Please try again.'
             }
           });
         }
-
-        return NextResponse.json({
-          response_action: 'update',
-          view: {
-            type: 'modal',
-            title: { type: 'plain_text', text: 'Issue Created' },
-            blocks: [
-              {
-                type: 'section',
-                text: { type: 'mrkdwn', text: `✅ Created issue <${created.url}|#${created.number} - ${created.title}> in \`${repository}\`` }
-              }
-            ]
-          }
-        });
-      } catch (error) {
-        console.error('Error creating issue from modal submission:', error);
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
       }
     }
 

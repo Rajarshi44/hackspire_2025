@@ -389,7 +389,7 @@ export async function POST(req: NextRequest) {
                   type: 'section',
                   text: {
                     type: 'mrkdwn',
-                    text: '📝 *Create GitHub Issue*\n\nSelect a repository and provide issue details:'
+                    text: '📝 *Create GitHub Issue*\n\nSelect a repository to create an issue in:'
                   }
                 },
                 {
@@ -405,7 +405,7 @@ export async function POST(req: NextRequest) {
                       text: 'Select repository...'
                     },
                     options: repoOptions,
-                    action_id: 'select_repository'
+                    action_id: 'select_repository_for_issue'
                   }
                 },
                 {
@@ -415,18 +415,17 @@ export async function POST(req: NextRequest) {
                       type: 'button',
                       text: {
                         type: 'plain_text',
-                        text: '📝 Continue with Issue Details'
+                        text: '� Refresh Repositories'
                       },
-                      action_id: 'show_issue_form',
-                      style: 'primary'
+                      action_id: 'refresh_repos'
                     },
                     {
                       type: 'button',
                       text: {
                         type: 'plain_text',
-                        text: '🔄 Refresh Repositories'
+                        text: '� Enter Repository Manually'
                       },
-                      action_id: 'refresh_repos'
+                      action_id: 'manual_repo_entry'
                     }
                   ]
                 }
@@ -531,6 +530,236 @@ ${prList}`,
             });
           }
 
+        case 'switchrepo':
+          try {
+            const userIdString = userId || '';
+            console.log('Switching repository for user:', userIdString);
+            
+            const { slackUserService } = await import('@/lib/slack-user-service');
+            
+            if (!userIdString) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '❌ Unable to identify user. Please try again.',
+              });
+            }
+            
+            const hasGitHubAuth = await slackUserService.hasGitHubAuth(userIdString);
+            
+            if (!hasGitHubAuth) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '🔗 GitHub Authentication Required',
+                blocks: [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: '🔄 *Switch Repository*\n\nTo switch repositories, you need to connect your GitHub account first.'
+                    }
+                  },
+                  {
+                    type: 'actions',
+                    elements: [
+                      {
+                        type: 'button',
+                        text: {
+                          type: 'plain_text',
+                          text: '🔗 Connect GitHub Account'
+                        },
+                        action_id: 'connect_github',
+                        style: 'primary',
+                        url: `${process.env.NEXTAUTH_URL || 'http://localhost:9002'}/api/auth/github/slack?user_id=${userIdString}&channel_id=${channelId}`
+                      }
+                    ]
+                  }
+                ]
+              });
+            }
+
+            // Get user repositories
+            const userRepos = await slackUserService.getUserRepositories(userIdString);
+            console.log('User repositories for switch:', { userId: userIdString, repoCount: userRepos.length });
+            
+            if (userRepos.length === 0) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '📁 No Repositories Found',
+                blocks: [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: '🔄 *Switch Repository*\n\n📁 No repositories found in your GitHub account.'
+                    }
+                  },
+                  {
+                    type: 'actions',
+                    elements: [
+                      {
+                        type: 'button',
+                        text: {
+                          type: 'plain_text',
+                          text: '🔄 Refresh GitHub Connection'
+                        },
+                        action_id: 'refresh_github',
+                        style: 'primary',
+                        url: `${process.env.NEXTAUTH_URL || 'http://localhost:9002'}/api/auth/github/slack?user_id=${userIdString}&channel_id=${channelId}&refresh=true`
+                      }
+                    ]
+                  }
+                ]
+              });
+            }
+
+            // Get current repository (if any)
+            const currentRepo = await slackUserService.getCurrentRepository(userIdString);
+            
+            // Create repository selection dropdown
+            const repoOptions = userRepos.slice(0, 25).map((repo: string) => ({
+              text: {
+                type: 'plain_text',
+                text: repo.length > 75 ? repo.substring(0, 72) + '...' : repo
+              },
+              value: repo
+            }));
+
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: '🔄 Switch Repository',
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `🔄 *Switch Repository*\n\n${currentRepo ? `📁 **Current repository:** ${currentRepo}` : '📁 **No repository currently selected**'}\n\nSelect a new repository to work with:`
+                  }
+                },
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `📊 *Available repositories:* ${userRepos.length} found`
+                  },
+                  accessory: {
+                    type: 'static_select',
+                    placeholder: {
+                      type: 'plain_text',
+                      text: 'Select repository...'
+                    },
+                    options: repoOptions,
+                    action_id: 'switch_repository'
+                  }
+                },
+                {
+                  type: 'actions',
+                  elements: [
+                    {
+                      type: 'button',
+                      text: {
+                        type: 'plain_text',
+                        text: '✅ Confirm Switch'
+                      },
+                      action_id: 'confirm_repo_switch',
+                      style: 'primary'
+                    },
+                    {
+                      type: 'button',
+                      text: {
+                        type: 'plain_text',
+                        text: '🔄 Refresh List'
+                      },
+                      action_id: 'refresh_repos'
+                    },
+                    {
+                      type: 'button',
+                      text: {
+                        type: 'plain_text',
+                        text: '❌ Cancel'
+                      },
+                      action_id: 'cancel_repo_switch'
+                    }
+                  ]
+                }
+              ]
+            });
+
+          } catch (error) {
+            console.error('Error in switchrepo command:', error);
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: `❌ Error switching repository: ${error instanceof Error ? error.message : 'Unknown error'}.\n\nPlease try again or contact administrator.`,
+            });
+          }
+
+        case 'logout':
+          try {
+            const userIdString = userId || '';
+            console.log('Logging out user:', userIdString);
+            
+            if (!userIdString) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '❌ Unable to identify user. Please try again.',
+              });
+            }
+
+            const { slackUserService } = await import('@/lib/slack-user-service');
+            
+            // Check if user is currently authenticated
+            const hasGitHubAuth = await slackUserService.hasGitHubAuth(userIdString);
+            
+            if (!hasGitHubAuth) {
+              return NextResponse.json({
+                response_type: 'ephemeral',
+                text: '🔓 Already Logged Out',
+                blocks: [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'mrkdwn',
+                      text: '🔓 *Logout Status*\n\nYou are not currently connected to GitHub.\n\nUse `/gitpulse create-issue` or `/gitpulse switchrepo` to connect your account.'
+                    }
+                  }
+                ]
+              });
+            }
+
+            // Perform logout - disconnect GitHub authentication
+            await slackUserService.disconnectGitHubAuth(userIdString);
+            console.log('User logged out successfully:', userIdString);
+
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: '🔓 Successfully Logged Out',
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: '🔓 *Logout Successful*\n\n✅ Your GitHub account has been disconnected from GitPulse.\n\n🔒 **What was removed:**\n• GitHub authentication tokens\n• Repository access permissions\n• Cached repository data\n\n🔗 **To reconnect later:**\nUse `/gitpulse create-issue` or `/gitpulse switchrepo`'
+                  }
+                },
+                {
+                  type: 'context',
+                  elements: [
+                    {
+                      type: 'mrkdwn',
+                      text: '🛡️ Your data privacy is important to us. All authentication data has been securely removed.'
+                    }
+                  ]
+                }
+              ]
+            });
+
+          } catch (error) {
+            console.error('Error in logout command:', error);
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              text: `❌ Error during logout: ${error instanceof Error ? error.message : 'Unknown error'}.\n\nPlease try again or contact administrator.`,
+            });
+          }
+
         case 'status':
           const statusChecks = {
             slackBotToken: !!process.env.SLACK_BOT_TOKEN,
@@ -563,7 +792,7 @@ ${prList}`,
                 type: 'section',
                 text: {
                   type: 'mrkdwn',
-                  text: '*GitPulse Commands:*\n\n• `/gitpulse analyze` - Analyze recent channel messages for potential issues\n• `/gitpulse create-issue` - Create a new GitHub issue\n• `/gitpulse issuelist` - List issues in your repository\n• `/gitpulse prlist` - List pull requests in your repository\n• `/gitpulse assign <issueId>` - Assign an issue to MCP\n• `/gitpulse status` - Check bot configuration status\n• `/gitpulse help` - Show this help message\n\nYou can also mention @GitPulse in any channel to get my attention!'
+                  text: '*GitPulse Commands:*\n\n• `/gitpulse analyze` - Analyze recent channel messages for potential issues\n• `/gitpulse create-issue` - Create a new GitHub issue\n• `/gitpulse issuelist` - List issues in your repository\n• `/gitpulse prlist` - List pull requests in your repository\n• `/gitpulse assign <issueId>` - Assign an issue to MCP\n• `/gitpulse switchrepo` - Switch to a different repository\n• `/gitpulse logout` - Disconnect your GitHub account\n• `/gitpulse status` - Check bot configuration status\n• `/gitpulse help` - Show this help message\n\nYou can also mention @GitPulse in any channel to get my attention!'
                 }
               }
             ]
