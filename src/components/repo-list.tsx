@@ -56,7 +56,8 @@ function RepoChannels({ repoFullName }: { repoFullName: string }) {
     const firestore = useFirestore();
     const encodedRepoFullName = encodeURIComponent(repoFullName);
     const pathname = usePathname();
-    const { setOpenMobile } = useSidebar();
+  const { setOpenMobile } = useSidebar();
+  const router = useRouter();
   
     const channelsQuery = useMemoFirebase(() => 
       firestore ? collection(firestore, 'repos', encodedRepoFullName, 'channels') : null,
@@ -71,20 +72,20 @@ function RepoChannels({ repoFullName }: { repoFullName: string }) {
 
     return (
         <SidebarMenuSub>
-            {channels?.map(channel => (
-                <SidebarMenuSubItem key={channel.id}>
-                    <Link href={`/dashboard/${repoFullName}/channels/${channel.id}`} legacyBehavior passHref>
-                        <SidebarMenuSubButton 
-                            as="a"
-                            isActive={pathname === `/dashboard/${repoFullName}/channels/${channel.id}`}
-                            onClick={() => setOpenMobile(false)}
-                        >
-                            <Hash />
-                            <span>{channel.name}</span>
-                        </SidebarMenuSubButton>
-                    </Link>
-                </SidebarMenuSubItem>
-            ))}
+      {channels?.map(channel => (
+        <SidebarMenuSubItem key={channel.id}>
+          <SidebarMenuSubButton
+            isActive={pathname === `/dashboard/${repoFullName}/channels/${channel.id}`}
+            onClick={() => {
+              setOpenMobile(false);
+              router.push(`/dashboard/${repoFullName}/channels/${channel.id}`);
+            }}
+          >
+            <Hash />
+            <span>{channel.name}</span>
+          </SidebarMenuSubButton>
+        </SidebarMenuSubItem>
+      ))}
         </SidebarMenuSub>
     )
 }
