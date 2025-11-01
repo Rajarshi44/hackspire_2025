@@ -39,11 +39,22 @@ export default function Home() {
             </div>
           </div>
           <div className="mx-10 mt-32">
-            <img
-              src="https://i.postimg.cc/0yk8Vz7t/dashboard.webp"
-              className="w-full rounded-lg border shadow-lg"
-              alt="GitPulse Dashboard"
-            />
+            <div className="relative aspect-video w-full max-w-4xl mx-auto">
+              <div className="relative bg-gray-800 p-6 rounded-3xl shadow-2xl border-2 border-gray-700">
+                <div className="relative overflow-hidden rounded-2xl bg-black">
+                  <iframe
+                    src="https://www.youtube.com/embed/hdAvRx74J-o?autoplay=1&mute=1&loop=1&playlist=hdAvRx74J-o"
+                    title="GitPulse Demo"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    className="w-full aspect-video"
+                  />
+                </div>
+                <div className="absolute top-3 left-1/2 transform -translate-x-1/2 w-20 h-1 bg-gray-600 rounded-full"></div>
+                <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-gray-600 rounded-full"></div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
