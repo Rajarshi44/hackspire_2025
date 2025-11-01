@@ -556,3 +556,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+// GET handler for health checks and webhook verification
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'Slack interactions endpoint is active',
+    method: 'POST',
+    note: 'This endpoint only accepts POST requests from Slack'
+  });
+}
