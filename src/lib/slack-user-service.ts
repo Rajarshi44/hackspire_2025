@@ -221,8 +221,13 @@ export class SlackUserService {
         return [];
       }
       
-      const token = await this.getGitHubToken(slackUserId);
-      
+      let token = await this.getGitHubToken(slackUserId);
+      const fallback = process.env.GITHUB_FALLBACK_TOKEN || null;
+      if (!token && fallback) {
+        console.warn('Using fallback GitHub token for user repositories', { slackUserId });
+        token = fallback;
+      }
+
       if (!token) {
         console.log('No GitHub token found for user:', slackUserId);
         return [];
@@ -273,10 +278,18 @@ export class SlackUserService {
     try {
       // Prefer per-user token when available
       let token: string | null = null;
+      let usedFallback = false;
       if (slackUserId) {
         token = await this.getGitHubToken(slackUserId);
       }
-      // Do NOT fall back to a global token by default — require user auth
+      if (!token) {
+        const fallback = process.env.GITHUB_FALLBACK_TOKEN || null;
+        if (fallback) {
+          token = fallback;
+          usedFallback = true;
+          console.warn('Using fallback GitHub token to fetch issues', { repoName, slackUserId });
+        }
+      }
       if (!token) {
         console.warn('No GitHub token available for user; cannot fetch issues', { slackUserId });
         return [];
@@ -304,6 +317,7 @@ export class SlackUserService {
         .filter(item => !item.pull_request)
         .map(item => ({ number: item.number, title: item.title }));
 
+      // Optionally, we could return metadata about fallback usage. For now, return issues list.
       return issues;
     } catch (error) {
       console.error('Error fetching issues from GitHub:', error);
@@ -318,8 +332,17 @@ export class SlackUserService {
     console.log('Fetching pull requests for repository:', repoName, { slackUserId });
     try {
       let token: string | null = null;
+      let usedFallback = false;
       if (slackUserId) {
         token = await this.getGitHubToken(slackUserId);
+      }
+      if (!token) {
+        const fallback = process.env.GITHUB_FALLBACK_TOKEN || null;
+        if (fallback) {
+          token = fallback;
+          usedFallback = true;
+          console.warn('Using fallback GitHub token to fetch PRs', { repoName, slackUserId });
+        }
       }
       if (!token) {
         console.warn('No GitHub token available for user; cannot fetch PRs', { slackUserId });
@@ -354,7 +377,16 @@ export class SlackUserService {
   async createIssueForRepository(repoName: string, title: string, body: string, slackUserId: string): Promise<{ number: number; url: string; title: string } | null> {
     console.log('Creating GitHub issue:', { repoName, title, slackUserId });
     try {
-      const token = await this.getGitHubToken(slackUserId);
+      let token = await this.getGitHubToken(slackUserId);
+      let usedFallback = false;
+      if (!token) {
+        const fallback = process.env.GITHUB_FALLBACK_TOKEN || null;
+        if (fallback) {
+          token = fallback;
+          usedFallback = true;
+          console.warn('Using fallback GitHub token to create issue', { repoName, slackUserId });
+        }
+      }
       if (!token) {
         console.warn('No GitHub token available for user; cannot create issue', { slackUserId });
         return null;
@@ -378,7 +410,12 @@ export class SlackUserService {
       }
 
       const data = await resp.json();
-      return { number: data.number, url: data.html_url, title: data.title };
+      const result = { number: data.number, url: data.html_url, title: data.title };
+      if (usedFallback) {
+        // Optionally annotate in logs that fallback was used
+        console.warn('Issue created using fallback token — attribution may not match user', { result, repoName, slackUserId });
+      }
+      return result;
     } catch (error) {
       console.error('Error creating GitHub issue:', error);
       return null;
