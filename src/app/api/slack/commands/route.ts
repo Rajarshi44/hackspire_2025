@@ -1400,3 +1400,12 @@ export async function POST(req: NextRequest) {
     }, { status: 200 });
   }
 }
+
+// GET handler for health checks
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'Slack commands endpoint is active',
+    method: 'POST',
+    note: 'This endpoint only accepts POST requests from Slack slash commands'
+  });
+}

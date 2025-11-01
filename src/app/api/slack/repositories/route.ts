@@ -69,4 +69,13 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// GET handler for health checks
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'Slack repositories endpoint is active',
+    method: 'POST',
+    note: 'This endpoint only accepts POST requests'
+  });
+}
+
 // Function removed - now using slackUserService
