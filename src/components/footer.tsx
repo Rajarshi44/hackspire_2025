@@ -67,9 +67,17 @@ const Footer = () => {
   return (
     <>
       <div
-        className='relative h-full sm:pt-14 pt-8 bg-[#f7f7f7] text-black'
+        className='relative h-full sm:pt-14 pt-8 text-white'
         ref={container}
       >
+        {/* Decorative background matching the homepage */}
+        <div className="pointer-events-none absolute top-0 left-0 z-0 h-full w-full bg-neutral-900/10 bg-[radial-gradient(ellipse_20%_80%_at_50%_-20%,rgba(120,119,198,0.3),rgba(255,255,255,0))]"></div>
+        <div className="pointer-events-none absolute h-full w-full overflow-hidden opacity-50 [perspective:200px] z-0">
+          <div className="absolute inset-0 [transform:rotateX(35deg)]">
+            <div className="animate-grid [inset:0%_0px] [margin-left:-50%] [height:300vh] [width:600vw] [transform-origin:100%_0_0] [background-image:linear-gradient(to_right,rgba(255,255,255,0.25)_1px,transparent_0),linear-gradient(to_bottom,rgba(255,255,255,0.2)_1px,transparent_0)] [background-size:120px_120px] [background-repeat:repeat]"></div>
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent to-70%"></div>
+        </div>
         <div className='sm:container  px-4 mx-auto'>
           <div className='md:flex justify-between w-full'>
             <div>
@@ -105,7 +113,7 @@ const Footer = () => {
                       >
                         <path
                           d='M8.14645 3.14645C8.34171 2.95118 8.65829 2.95118 8.85355 3.14645L12.8536 7.14645C13.0488 7.34171 13.0488 7.65829 12.8536 7.85355L8.85355 11.8536C8.65829 12.0488 8.34171 12.0488 8.14645 11.8536C7.95118 11.6583 7.95118 11.3417 8.14645 11.1464L11.2929 8H2.5C2.22386 8 2 7.77614 2 7.5C2 7.22386 2.22386 7 2.5 7H11.2929L8.14645 3.85355C7.95118 3.65829 7.95118 3.34171 8.14645 3.14645Z'
-                          fill='#000'
+                          fill='#000000f4'
                           fillRule='evenodd'
                           clipRule='evenodd'
                         ></path>
@@ -117,65 +125,65 @@ const Footer = () => {
             </div>
             <div className='flex gap-10'>
               <ul>
-                <li className='text-2xl pb-2 text-black font-semibold'>
+                <li className='text-2xl pb-2 text-white font-semibold'>
                   SITEMAP
                 </li>
-                <li className='text-xl font-medium'>
-                  <Link href='/'>Home</Link>
+                <li className='text-xl font-medium text-white'>
+                  <Link href='/' className='text-white'>Home</Link>
                 </li>
-                <li className='text-xl font-medium'>
-                  <Link href='/about'>About us</Link>
+                <li className='text-xl font-medium text-white'>
+                  <Link href='/about' className='text-white'>About us</Link>
                 </li>
-                <li className='text-xl font-medium'>
-                  <Link href='/services'>Our Services</Link>
+                <li className='text-xl font-medium text-white'>
+                  <Link href='/services' className='text-white'>Our Services</Link>
                 </li>
 
-                <li className='text-xl font-medium'>
-                  <Link href='/projects'>Projects</Link>
+                <li className='text-xl font-medium text-white'>
+                  <Link href='/projects' className='text-white'>Projects</Link>
                 </li>
-                <li className='text-xl font-medium'>
-                  <Link href='/blogs'>Blogs</Link>
+                <li className='text-xl font-medium text-white'>
+                  <Link href='/blogs' className='text-white'>Blogs</Link>
                 </li>
-                <li className='text-xl font-medium'>
-                  <Link href='/contact-us'>Contact</Link>
+                <li className='text-xl font-medium text-white'>
+                  <Link href='/contact-us' className='text-white'>Contact</Link>
                 </li>
               </ul>
               <ul>
-                <li className='text-2xl pb-2 text-black font-semibold'>
+                <li className='text-2xl pb-2 text-white font-semibold'>
                   SOCIAL
                 </li>
-                <li className='text-xl font-medium'>
+                <li className='text-xl font-medium text-white'>
                   <a
                     href='https://www.linkedin.com/company/next-codez/'
                     target='_blank'
-                    className='underline'
+                    className='underline text-white'
                   >
                     LinkedIn
                   </a>
                 </li>
-                <li className='text-xl font-medium'>
+                <li className='text-xl font-medium text-white'>
                   <a
                     href='https://twitter.com/NextCodez'
                     target='_blank'
-                    className='underline'
+                    className='underline text-white'
                   >
                     Twitter
                   </a>
                 </li>
-                <li className='text-xl font-medium'>
+                <li className='text-xl font-medium text-white'>
                   <a
                     href='https://www.instagram.com/nextcodez/'
                     target='_blank'
-                    className='underline'
+                    className='underline text-white'
                   >
                     Instagram
                   </a>
                 </li>
-                <li className='text-xl font-medium'>
+                <li className='text-xl font-medium text-white'>
                   <a
                     href='https://www.facebook.com/nextcodezz'
                     target='_blank'
-                    className='underline'
+                    className='underline text-white'
                   >
                     Facebook
                   </a>
@@ -183,38 +191,17 @@ const Footer = () => {
               </ul>
             </div>
           </div>
-          <div className='border-y-2 md:py-4 border-gray-200'>
-            <motion.svg
-              width='776'
-              ref={ref}
-              height='137'
-              viewBox='0 0 776 137'
-              fill='none'
-              className='sm:h-fit h-20 md:px-8 px-2 footer-logo w-full'
-              xmlns='http://www.w3.org/2000/svg'
-              initial='hidden'
-              animate={isInView ? 'visible' : 'hidden'}
-            >
-              {pathArr.map((path, index) => {
-                return (
-                  <>
-                    <motion.path
-                      custom={index}
-                      // @ts-ignore
-                      variants={variants}
-                      d={path}
-                      fill='#3E7AEE'
-                    />
-                  </>
-                );
-              })}
-            </motion.svg>
+          <div className='border-y-2 md:py-4 border-grey-200'>
+            {/* Simplified textual logo for GitPulse */}
+            <div className='sm:h-fit h-20 md:px-8 px-2 footer-logo w-full flex items-center justify-center'>
+              <span className='text-2xl md:text-4xl font-extrabold tracking-tight text-[#3E7AEE]'>GitPulse</span>
+            </div>
           </div>
           <div className='flex md:flex-row flex-col-reverse gap-3 justify-between py-2'>
             <span className='font-medium'>
-              &copy; 2023 NextCodez. All Rights Reserved.
+              &copy; 2023 GitPulse. All Rights Reserved.
             </span>
-            <a href='#' className='font-semibold'>
+            <a href='#' className='font-semibold text-white'>
               Privacy Policy
             </a>
           </div>

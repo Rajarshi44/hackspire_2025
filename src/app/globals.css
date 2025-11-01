@@ -4,8 +4,8 @@
 
 @layer base {
   :root {
-    --background: 252 10% 9%;
-    --foreground: 0 0% 98%;
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
     --card: 252 8% 12%;
     --card-foreground: 0 0% 98%;
     --popover: 252 10% 9%;
@@ -14,8 +14,8 @@
     --primary-foreground: 0 0% 100%;
     --secondary: 252 5% 20%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 252 5% 20%;
-    --muted-foreground: 0 0% 63.9%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
     --accent: 152 59% 45%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%;
@@ -39,10 +39,12 @@
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 240 5% 20%;
     --sidebar-ring: 252 83% 65%;
+    --brand: 266 100% 50%;
+    --brand-foreground: 270 100% 98%;
   }
 
   .dark {
-    --background: 240 8% 10%;
+    --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
     --card: 240 8% 12%;
     --card-foreground: 0 0% 98%;
@@ -52,8 +54,8 @@
     --primary-foreground: 0 0% 100%;
     --secondary: 240 5% 20%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 5% 20%;
-    --muted-foreground: 0 0% 63.9%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
     --accent: 152 59% 45%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
@@ -61,7 +63,7 @@
     --border: 240 5% 20%;
     --input: 240 5% 20%;
     --ring: 252 83% 65%;
-    
+
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -76,6 +78,11 @@
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 240 5% 20%;
     --sidebar-ring: 252 83% 65%;
+    --brand: 266 70% 60%;
+    --brand-foreground: 270 100% 98%;
+  }
+  .theme {
+    --animate-marquee: marquee var(--duration) linear infinite;
   }
 }
 
@@ -116,4 +123,27 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+
+/* Marquee animation for testimonial carousel */
+@layer utilities {
+  .animate-marquee {
+    animation: marquee var(--duration, 40s) linear infinite;
+  }
+
+  @keyframes marquee {
+    0% { transform: translateX(0%); }
+    100% { transform: translateX(-50%); }
+  }
+}
+
+@theme inline {
+  @keyframes marquee {
+  from {
+    transform: translateX(0);
+    }
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+    }
+  }
 }

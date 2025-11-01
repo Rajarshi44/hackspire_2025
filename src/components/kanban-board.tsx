@@ -150,8 +150,9 @@ export function KanbanBoard({ repoFullName, aiIssues = [], className }: KanbanBo
 
     const srcItems = Array.from(board[srcCol]);
     const [moved] = srcItems.splice(source.index, 1);
-    const dstItems = Array.from(board[dstCol]);
-    dstItems.splice(destination.index, 0, { ...moved, column: dstCol });
+  const dstItems = Array.from(board[dstCol]);
+  // dstCol is inferred as a key of board (string), cast to KanbanIssue['column'] to satisfy TS
+  dstItems.splice(destination.index, 0, { ...moved, column: dstCol as KanbanIssue['column'] });
 
     setBoard({
       ...board,
