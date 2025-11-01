@@ -270,11 +270,43 @@ export class SlackUserService {
    */
   async getIssuesForRepository(repoName: string): Promise<{ number: number; title: string }[]> {
     console.log('Fetching issues for repository:', repoName);
-    // Mock implementation; replace with actual GitHub API call
-    return [
-      { number: 1, title: 'Sample Issue 1' },
-      { number: 2, title: 'Sample Issue 2' },
-    ];
+    try {
+      // Try to use a PAT from env if available as a fallback
+      const fallbackToken = process.env.GITHUB_FALLBACK_TOKEN || null;
+
+      // repoName expected in form 'owner/repo'
+      const url = `https://api.github.com/repos/${repoName}/issues?per_page=30&state=all`;
+
+      // If repo is specified as full name, we may not have a user token here — try to find owner token
+      // For now, prefer the fallback token when user-scoped token is not available
+      // The caller may pass repoName only; token resolution is best-effort
+
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'GitPulse-Bot/1.0'
+      };
+
+      if (fallbackToken) {
+        headers['Authorization'] = `Bearer ${fallbackToken}`;
+      }
+
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) {
+        console.error('GitHub issues fetch failed', repoName, resp.status, resp.statusText);
+        return [];
+      }
+
+      const data = await resp.json();
+      // GitHub API returns both issues and PRs on the issues endpoint; filter out PRs
+      const issues = (data as any[])
+        .filter(item => !item.pull_request)
+        .map(item => ({ number: item.number, title: item.title }));
+
+      return issues;
+    } catch (error) {
+      console.error('Error fetching issues from GitHub:', error);
+      return [];
+    }
   }
 
   /**
@@ -282,11 +314,31 @@ export class SlackUserService {
    */
   async getPullRequestsForRepository(repoName: string): Promise<{ number: number; title: string; state: string }[]> {
     console.log('Fetching pull requests for repository:', repoName);
-    // Mock implementation; replace with actual GitHub API call
-    return [
-      { number: 101, title: 'Sample PR 1', state: 'open' },
-      { number: 102, title: 'Sample PR 2', state: 'closed' },
-    ];
+    try {
+      const fallbackToken = process.env.GITHUB_FALLBACK_TOKEN || null;
+      const url = `https://api.github.com/repos/${repoName}/pulls?per_page=30&state=all`;
+
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'GitPulse-Bot/1.0'
+      };
+      if (fallbackToken) {
+        headers['Authorization'] = `Bearer ${fallbackToken}`;
+      }
+
+      const resp = await fetch(url, { headers });
+      if (!resp.ok) {
+        console.error('GitHub PRs fetch failed', repoName, resp.status, resp.statusText);
+        return [];
+      }
+
+      const data = await resp.json();
+      const prs = (data as any[]).map(pr => ({ number: pr.number, title: pr.title, state: pr.state }));
+      return prs;
+    } catch (error) {
+      console.error('Error fetching PRs from GitHub:', error);
+      return [];
+    }
   }
 }
 
