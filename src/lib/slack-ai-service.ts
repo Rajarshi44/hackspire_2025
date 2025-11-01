@@ -80,6 +80,11 @@ export class SlackAIService {
    * Get user information from Slack
    */
   async getUserInfo(userId: string): Promise<SlackUser> {
+    // Defensive: if no userId provided, return a generic placeholder
+    if (!userId) {
+      return { id: '', name: 'unknown' };
+    }
+
     const response = await fetch(`https://slack.com/api/users.info`, {
       method: 'POST',
       headers: {
@@ -94,13 +99,28 @@ export class SlackAIService {
     const data = await response.json();
     
     if (!data.ok) {
-      throw new Error(`Failed to fetch user info: ${data.error}`);
+      // Handle common not-found cases gracefully rather than throwing.
+      const err = String(data.error || 'unknown_error');
+      console.warn('⚠️ Slack users.info returned error for userId', { userId, error: err });
+
+      if (err.includes('user_not_found') || err.includes('users_not_found') || err === 'user_not_found') {
+        // Return a fallback user object so callers can continue processing
+        return {
+          id: userId,
+          name: `<deleted:${userId}>`,
+        };
+      }
+
+      // For other errors, surface a helpful error message
+      throw new Error(`Failed to fetch user info: ${err}`);
     }
 
+    // Defensive access in case Slack returns an unexpected shape
+    const user = data.user || {};
     return {
-      id: data.user.id,
-      name: data.user.name,
-      real_name: data.user.real_name,
+      id: user.id || userId,
+      name: user.name || user.real_name || user.profile?.display_name || userId,
+      real_name: user.real_name,
     };
   }
 
@@ -140,12 +160,28 @@ export class SlackAIService {
       
       // Convert Slack messages to the format expected by AI
       const formattedMessages = await Promise.all(
-        messages.map(async (msg) => {
-          const userInfo = await this.getUserInfo(msg.user);
-          return {
-            sender: userInfo.name || userInfo.real_name || msg.user,
-            text: msg.text,
-          };
+        messages.map(async (msg: any) => {
+          try {
+            // Prefer explicit user id lookups when available
+            if (msg.user) {
+              const userInfo = await this.getUserInfo(msg.user);
+              return {
+                sender: userInfo.name || userInfo.real_name || msg.user,
+                text: msg.text,
+              };
+            }
+
+            // Bot messages or system messages may include a username or bot_id
+            const fallbackName = msg.username || msg.bot_id || msg.user || 'unknown';
+            return {
+              sender: fallbackName,
+              text: msg.text,
+            };
+          } catch (err) {
+            console.warn('⚠️ Failed to resolve user for message, using fallback', { err, msgUser: msg.user });
+            const fallbackName = msg.username || msg.user || msg.bot_id || 'unknown';
+            return { sender: fallbackName, text: msg.text };
+          }
         })
       );
 
@@ -272,12 +308,23 @@ export class SlackAIService {
       const userInfo = await this.getUserInfo(userId);
       const formattedMessages = await Promise.all(
         [...messages, { text: messageText, user: userId, ts: Date.now().toString(), channel: channelId }]
-        .map(async (msg) => {
-          const info = await this.getUserInfo(msg.user);
-          return {
-            sender: info.name || info.real_name || msg.user,
-            text: msg.text,
-          };
+        .map(async (msg: any) => {
+          try {
+            if (msg.user) {
+              const info = await this.getUserInfo(msg.user);
+              return {
+                sender: info.name || info.real_name || msg.user,
+                text: msg.text,
+              };
+            }
+
+            const fallbackName = msg.username || msg.bot_id || msg.user || 'unknown';
+            return { sender: fallbackName, text: msg.text };
+          } catch (err) {
+            console.warn('⚠️ Failed to resolve user during autoAnalyzeMessage, using fallback', { err, msgUser: msg.user });
+            const fallbackName = msg.username || msg.user || msg.bot_id || 'unknown';
+            return { sender: fallbackName, text: msg.text };
+          }
         })
       );
 
