@@ -288,6 +288,36 @@ export class SlackAIService {
   }
 
   /**
+   * Send an ephemeral message to a user in a channel (visible only to that user)
+   */
+  async sendEphemeral(channel: string, user: string, text: string, blocks?: any[]): Promise<boolean> {
+    try {
+      const response = await fetch('https://slack.com/api/chat.postEphemeral', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.botToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          channel,
+          user,
+          text,
+          blocks,
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.ok) {
+        console.warn('chat.postEphemeral returned not ok:', data.error);
+      }
+      return data.ok;
+    } catch (error) {
+      console.error('Error sending ephemeral Slack message:', error);
+      return false;
+    }
+  }
+
+  /**
    * Automatically analyze a message and suggest creating an issue if detected
    */
   async autoAnalyzeMessage(

@@ -139,11 +139,11 @@ export async function POST(req: NextRequest) {
               console.log('AI service imported successfully');
               return await slackAIService.analyzeChannelForIssues(channelId!);
             })();
-
             try {
+              // Race analysis against a short timeout to meet Slack's 3s requirement
               const analysisResult = await Promise.race([analysisPromise, timeoutPromise]);
-              console.log('Analysis completed:', { hasIssue: analysisResult.hasIssue });
-              
+              console.log('Analysis completed within timeout:', { hasIssue: analysisResult.hasIssue });
+
               if (analysisResult.hasIssue) {
                 return NextResponse.json({
                   response_type: 'ephemeral',
@@ -188,7 +188,59 @@ export async function POST(req: NextRequest) {
                 });
               }
             } catch (timeoutError) {
-              console.warn('Analysis timed out, returning immediate response');
+              console.warn('Analysis timed out, returning immediate response and will continue in background');
+
+              // Respond immediately to Slack to avoid dispatch_failed
+              // Then continue processing in background and send ephemeral follow-up to the invoking user
+              (async () => {
+                try {
+                  const analysisResult = await analysisPromise; // finish analysis
+                  const { slackAIService } = await import('@/lib/slack-ai-service');
+
+                  const userIdForEphemeral = userId || undefined;
+                  const followupText = analysisResult.hasIssue
+                    ? `🔍 Analysis finished — detected potential issue:\n*${analysisResult.issueData?.title}*\n${analysisResult.issueData?.description}\n\nPriority: ${analysisResult.issueData?.priority || 'normal'}`
+                    : `🔍 Analysis finished — no actionable issues detected.`;
+
+                  const blocks = analysisResult.hasIssue
+                    ? [
+                        {
+                          type: 'section',
+                          text: {
+                            type: 'mrkdwn',
+                            text: `🔍 *Analysis Complete*\n\n${analysisResult.message}\n\n**Priority:** ${analysisResult.issueData?.priority}\n**Description:** ${analysisResult.issueData?.description}`
+                          }
+                        },
+                        {
+                          type: 'actions',
+                          elements: [
+                            {
+                              type: 'button',
+                              text: { type: 'plain_text', text: 'Create GitHub Issue' },
+                              action_id: 'create_github_issue',
+                              style: 'primary'
+                            }
+                          ]
+                        }
+                      ]
+                    : [
+                        {
+                          type: 'section',
+                          text: { type: 'mrkdwn', text: `🔍 *Analysis Complete*\n\n${analysisResult.message}` }
+                        }
+                      ];
+
+                  // If we have a userId, send ephemeral message to them; otherwise post to channel
+                  if (userIdForEphemeral) {
+                    await slackAIService.sendEphemeral(channelId!, userIdForEphemeral, followupText, blocks);
+                  } else {
+                    await slackAIService.sendMessage(channelId!, followupText, blocks);
+                  }
+                } catch (bgError) {
+                  console.error('Background analysis failed:', bgError);
+                }
+              })();
+
               return NextResponse.json({
                 response_type: 'ephemeral',
                 text: '🔍 Analysis started... This may take a moment. I\'ll send you the results shortly.',
