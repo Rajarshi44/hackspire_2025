@@ -92,6 +92,12 @@ async function findMCPJobByPR(
 ): Promise<{ jobId: string; jobData: any } | null> {
   try {
     const db = getFirestore();
+    
+    if (!db || typeof db.collection !== 'function') {
+      console.error('Invalid Firestore instance - collection method not available');
+      return null;
+    }
+    
     const jobsRef = db.collection('repos').doc(repoId).collection('mcp_jobs');
     const querySnapshot = await jobsRef.where('pr_number', '==', prNumber).get();
 
@@ -106,8 +112,8 @@ async function findMCPJobByPR(
       jobId: jobDoc.id,
       jobData: jobDoc.data()
     };
-  } catch (error) {
-    console.error('Error finding MCP job:', error);
+  } catch (error: any) {
+    console.error('Error finding MCP job:', error.message, error.stack);
     return null;
   }
 }
@@ -121,6 +127,12 @@ async function findMCPJobByIssue(
 ): Promise<{ jobId: string; jobData: any } | null> {
   try {
     const db = getFirestore();
+    
+    if (!db || typeof db.collection !== 'function') {
+      console.error('Invalid Firestore instance - collection method not available');
+      return null;
+    }
+    
     const jobsRef = db.collection('repos').doc(repoId).collection('mcp_jobs');
     const querySnapshot = await jobsRef.where('issueNumber', '==', issueNumber).get();
 
@@ -135,8 +147,8 @@ async function findMCPJobByIssue(
       jobId: jobDoc.id,
       jobData: jobDoc.data()
     };
-  } catch (error) {
-    console.error('Error finding MCP job:', error);
+  } catch (error: any) {
+    console.error('Error finding MCP job:', error.message, error.stack);
     return null;
   }
 }
@@ -175,6 +187,13 @@ async function postChatNotification(
 ): Promise<void> {
   try {
     const db = getFirestore();
+    
+    if (!db || typeof db.collection !== 'function') {
+      console.error('Invalid Firestore instance - collection method not available');
+      console.log('Skipping chat notification:', message);
+      return; // Don't throw, just skip
+    }
+    
     const messagesRef = db.collection('repos').doc(repoId).collection('messages');
 
     await messagesRef.add({
@@ -189,9 +208,9 @@ async function postChatNotification(
     });
 
     console.log('Posted chat notification:', message);
-  } catch (error) {
-    console.error('Error posting chat notification:', error);
-    throw error;
+  } catch (error: any) {
+    console.error('Error posting chat notification:', error.message);
+    // Don't throw - notifications are non-critical
   }
 }
 
@@ -724,11 +743,30 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Verify that this is a POST-only endpoint
+// Diagnostic endpoint
 export async function GET() {
-  return NextResponse.json({ 
-    message: 'GitHub webhook endpoint is active',
-    method: 'POST',
-    note: 'This endpoint accepts POST requests from GitHub webhooks'
-  });
+  try {
+    const db = getFirestore();
+    const hasCollection = db && typeof db.collection === 'function';
+    
+    return NextResponse.json({ 
+      message: 'GitHub webhook endpoint is active',
+      method: 'POST',
+      note: 'This endpoint accepts POST requests from GitHub webhooks',
+      diagnostics: {
+        firestoreInitialized: !!db,
+        hasCollectionMethod: hasCollection,
+        webhookSecretConfigured: !!process.env.GITHUB_WEBHOOK_SECRET,
+        firebaseServiceAccountConfigured: !!process.env.FIREBASE_SERVICE_ACCOUNT,
+        useMockFirestore: process.env.USE_MOCK_FIRESTORE === 'true',
+        nodeEnv: process.env.NODE_ENV
+      }
+    });
+  } catch (error: any) {
+    return NextResponse.json({
+      message: 'GitHub webhook endpoint has configuration issues',
+      error: error.message,
+      method: 'POST'
+    }, { status: 500 });
+  }
 }
