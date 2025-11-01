@@ -46,10 +46,10 @@ export function SlackIntegration({
         <CardContent>
           {isConnected ? (
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
+              <div className="flex items-center justify-between p-4 rounded-lg border bg-green-900/20 border-green-700/40">
                 <div>
-                  <p className="font-medium text-green-800">Connected to {workspaceName}</p>
-                  <p className="text-sm text-green-600">Bot user: {botUserId}</p>
+                  <p className="font-medium text-green-300">Connected to {workspaceName}</p>
+                  <p className="text-sm text-green-400">Bot user: {botUserId}</p>
                 </div>
                 <Button variant="outline" size="sm">
                   <Settings className="h-4 w-4 mr-2" />
@@ -61,25 +61,25 @@ export function SlackIntegration({
                 <div className="text-center p-4 border rounded-lg">
                   <MessageSquare className="h-8 w-8 mx-auto mb-2 text-blue-600" />
                   <p className="font-medium">Slash Commands</p>
-                  <p className="text-sm text-gray-600">Use /gitpulse in Slack</p>
+                  <p className="text-sm text-muted-foreground">Use /gitpulse in Slack</p>
                 </div>
                 <div className="text-center p-4 border rounded-lg">
                   <Zap className="h-8 w-8 mx-auto mb-2 text-yellow-600" />
                   <p className="font-medium">Auto-Detection</p>
-                  <p className="text-sm text-gray-600">AI analyzes messages</p>
+                  <p className="text-sm text-muted-foreground">AI analyzes messages</p>
                 </div>
                 <div className="text-center p-4 border rounded-lg">
                   <Bot className="h-8 w-8 mx-auto mb-2 text-purple-600" />
                   <p className="font-medium">Bot Mentions</p>
-                  <p className="text-sm text-gray-600">@gitpulse for help</p>
+                  <p className="text-sm text-muted-foreground">@gitpulse for help</p>
                 </div>
               </div>
             </div>
           ) : (
             <div className="text-center py-8">
-              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-medium mb-2">Slack Not Connected</h3>
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Connect your Slack workspace to start using GitPulse in your channels
               </p>
               <Button>
@@ -106,7 +106,7 @@ export function SlackIntegration({
               <div className="flex items-center justify-between">
                 <div>
                   <Label htmlFor="auto-detection">Automatic Issue Detection</Label>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     AI automatically analyzes messages and suggests creating GitHub issues
                   </p>
                 </div>
@@ -120,7 +120,7 @@ export function SlackIntegration({
               <div className="flex items-center justify-between">
                 <div>
                   <Label htmlFor="channel-monitoring">Proactive Suggestions</Label>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-muted-foreground">
                     Get smart suggestions with one-click GitHub integration
                   </p>
                 </div>
@@ -131,9 +131,9 @@ export function SlackIntegration({
                 />
               </div>
 
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h4 className="font-medium text-blue-800 mb-2">🚀 New: Smart Auto-Detection</h4>
-                <ul className="text-sm text-blue-700 space-y-1">
+              <div className="p-4 rounded-lg border bg-primary/10 border-primary/20">
+                <h4 className="font-medium text-primary mb-2">🚀 New: Smart Auto-Detection</h4>
+                <ul className="text-sm text-primary/90 space-y-1">
                   <li>• AI listens to conversations and detects potential issues</li>
                   <li>• One-click GitHub authentication when needed</li>
                   <li>• Automatic repository selection from your GitHub account</li>
@@ -152,7 +152,7 @@ export function SlackIntegration({
                 placeholder="owner/repository-name"
                 defaultValue=""
               />
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Default repository for creating issues when not specified
               </p>
             </div>
@@ -165,7 +165,7 @@ export function SlackIntegration({
                 placeholder="Additional instructions for the AI when analyzing messages..."
                 rows={3}
               />
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted-foreground">
                 Customize how the AI analyzes your team's messages
               </p>
             </div>
@@ -221,9 +221,9 @@ export function SlackIntegration({
               <Badge variant="outline" className="mt-1">4</Badge>
               <div>
                 <p className="font-medium">Manual Commands</p>
-                <p className="text-sm text-gray-600">
-                  Use <code className="bg-gray-100 px-1 rounded">/gitpulse analyze</code> or 
-                  <code className="bg-gray-100 px-1 rounded ml-1">/gitpulse create-issue</code> for manual control
+                <p className="text-sm text-muted-foreground">
+                  Use <code className="bg-muted px-1 rounded">/gitpulse analyze</code> or 
+                  <code className="bg-muted px-1 rounded ml-1">/gitpulse create-issue</code> for manual control
                 </p>
               </div>
             </div>
@@ -231,9 +231,9 @@ export function SlackIntegration({
 
           <Separator />
 
-          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <h4 className="font-medium text-blue-800 mb-2">💡 Pro Tips</h4>
-            <ul className="text-sm text-blue-700 space-y-1">
+          <div className="p-4 rounded-lg border bg-primary/10 border-primary/20">
+            <h4 className="font-medium text-primary mb-2">💡 Pro Tips</h4>
+            <ul className="text-sm text-primary/90 space-y-1">
               <li>• Add GitPulse to channels where development discussions happen</li>
               <li>• Use @mentions in your messages to auto-assign GitHub issues</li>
               <li>• The AI learns from your team's communication patterns</li>

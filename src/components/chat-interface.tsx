@@ -484,35 +484,56 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
   const sheetOpen = isKanbanOpen && !isMdUp;
 
   return (
-    <div className="flex h-[calc(100vh-5rem)] w-full">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-5rem)] w-full bg-gradient-to-br from-background to-muted/50">
       {/* Chat panel: full width by default, halves when Kanban is open (desktop) */}
-      <div className={
-        sidePanelOpen
-          ? 'flex flex-col w-full md:w-1/2 transition-all duration-200'
-          : 'flex flex-col w-full transition-all duration-200'
-      }>
-        <div className="px-4 py-2 border-b flex items-center justify-end">
-          <Button variant="outline" size="sm" onClick={() => setIsKanbanOpen(v => !v)}>
+      <div
+        className={
+          sidePanelOpen
+            ? 'flex flex-col w-full md:w-1/2 transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50'
+            : 'flex flex-col w-full transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50'
+        }
+        style={{ minHeight: 0 }}
+      >
+        {/* Header */}
+        <div className="px-4 py-3 border-b flex items-center justify-between bg-gradient-to-r from-primary/10 to-accent/10 rounded-t-lg">
+          <div className="font-bold text-lg text-primary tracking-wide">Chat</div>
+          <Button variant="outline" size="sm" onClick={() => setIsKanbanOpen(v => !v)} className="font-semibold">
             <ListTodo className="h-4 w-4 mr-2" />
             {isKanbanOpen ? 'Hide Kanban' : 'Show Kanban'}
           </Button>
         </div>
+        {/* Messages */}
         <ScrollArea className="flex-1" ref={scrollAreaRef}>
-          <div className="p-4 space-y-4">
+          <div className="p-2 sm:p-4 space-y-4">
             {isLoading && messages.length === 0 && (
               <div className="flex justify-center items-center h-full">
-                <p>Loading messages...</p>
+                <p className="text-muted-foreground font-medium">Loading messages...</p>
               </div>
             )}
             {messages.map((msg) => (
-              <div key={msg.id}>
-                <ChatMessage message={msg} />
+              <div key={msg.id} className="">
+                {/* Message bubble styling: sender/receiver distinction */}
+                <div className={
+                  msg.senderId === user?.uid
+                    ? 'flex justify-end'
+                    : 'flex justify-start'
+                }>
+                  <div className={
+                    'max-w-[80%] sm:max-w-[70%] md:max-w-[60%] rounded-xl px-4 py-3 shadow-md ' +
+                    (msg.senderId === user?.uid
+                      ? 'bg-primary text-white font-bold border-2 border-primary/30'
+                      : 'bg-accent/30 text-primary font-semibold border-2 border-accent/40')
+                  }>
+                    <ChatMessage message={msg} />
+                  </div>
+                </div>
+                {/* AI issue suggestion and system messages */}
                 {msg.isIssue && (
-                  <div className="ml-12 mt-2 flex items-center gap-2">
+                  <div className="ml-8 mt-2 flex items-center gap-2">
                     <Sparkles className="h-5 w-5 text-primary" />
                     <span className="text-sm font-semibold text-primary">AI Suggestion</span>
                     {msg.issueUrl ? (
-                      <Button asChild size="sm" variant="outline">
+                      <Button asChild size="sm" variant="outline" className="font-semibold">
                         <Link href={msg.issueUrl} target="_blank">
                           <ExternalLink className="mr-2 h-4 w-4" />
                           View Issue
@@ -523,6 +544,7 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
                         size="sm"
                         onClick={() => handleCreateIssue(msg)}
                         disabled={isCreatingIssue || msg.status === 'completed'}
+                        className="font-semibold"
                       >
                         <Github className="mr-2 h-4 w-4" />
                         {isCreatingIssue ? 'Creating...' : 'Create GitHub Issue'}
@@ -534,24 +556,27 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
               </div>
             ))}
             {isBotThinking && (
-              <ChatMessage message={{
-                id: 'thinking',
-                sender: 'GitPulse AI',
-                senderId: 'ai_assistant',
-                avatarUrl: '/brain-circuit.svg',
-                text: 'Thinking...',
-                timestamp: null,
-              }} />
+              <div className="flex justify-center items-center">
+                <ChatMessage message={{
+                  id: 'thinking',
+                  sender: 'GitPulse AI',
+                  senderId: 'ai_assistant',
+                  avatarUrl: '/brain-circuit.svg',
+                  text: 'Thinking...',
+                  timestamp: null,
+                }} />
+              </div>
             )}
           </div>
         </ScrollArea>
-        <div className="p-4 border-t">
+        {/* Input */}
+        <div className="p-2 sm:p-4 border-t bg-gradient-to-r from-primary/10 to-accent/10 rounded-b-lg">
           <MessageInput onSendMessage={handleSendMessage} disabled={isBotThinking} repoFullName={repoFullName} />
         </div>
       </div>
       {/* Kanban board: desktop (side panel), mobile (Sheet) */}
       {sidePanelOpen && (
-        <div className="hidden md:flex w-1/2 border-l bg-background">
+        <div className="hidden md:flex w-1/2 border-l bg-background rounded-r-lg shadow-lg">
           <KanbanBoard repoFullName={repoFullName} aiIssues={aiIssuesForKanban} className="w-full h-full" />
         </div>
       )}
