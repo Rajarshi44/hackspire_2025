@@ -48,3 +48,12 @@ export async function POST(req: NextRequest) {
     });
   }
 }
+
+// GET handler for health checks
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'Slack verify-test endpoint is active',
+    method: 'POST',
+    note: 'This endpoint is for testing Slack signature verification'
+  });
+}

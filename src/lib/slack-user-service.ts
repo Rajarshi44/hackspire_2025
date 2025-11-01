@@ -273,7 +273,9 @@ export class SlackUserService {
   /**
    * Fetch issues for a repository
    */
-  async getIssuesForRepository(repoName: string, slackUserId?: string): Promise<{ number: number; title: string }[]> {
+  async getIssuesForRepository(repoName: string, slackUserId?: string): Promise<{
+    state: any; number: number; title: string 
+}[]> {
     console.log('Fetching issues for repository:', repoName, { slackUserId });
     try {
       // Prefer per-user token when available
@@ -315,7 +317,7 @@ export class SlackUserService {
       // GitHub API returns both issues and PRs on the issues endpoint; filter out PRs
       const issues = (data as any[])
         .filter(item => !item.pull_request)
-        .map(item => ({ number: item.number, title: item.title }));
+        .map(item => ({ number: item.number, title: item.title, state: item.state }));
 
       // Optionally, we could return metadata about fallback usage. For now, return issues list.
       return issues;
