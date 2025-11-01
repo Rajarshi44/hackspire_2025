@@ -57,7 +57,7 @@ const createGithubIssue = ai.defineTool(
       ...(assignees && assignees.length > 0 && { assignees }),
     };
 
-    const response = await fetch(githubApiUrl, {
+    let response = await fetch(githubApiUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -67,8 +67,41 @@ const createGithubIssue = ai.defineTool(
       body: JSON.stringify(issueData),
     });
 
+    // If we get a 422 error and have assignees, try again without assignees
+    if (!response.ok && response.status === 422 && assignees && assignees.length > 0) {
+      const errorText = await response.text();
+      console.warn('GitHub API 422 error with assignees:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+        assignees: assignees
+      });
+
+      // Check if the error is related to invalid assignees
+      if (errorText.includes('assignees') || errorText.includes('cannot be assigned')) {
+        console.log('Retrying GitHub issue creation without assignees...');
+        
+        // Retry without assignees
+        const issueDataWithoutAssignees = {
+          title: issueTitle,
+          body: `${issueDescription}\n\n---\n_Created by GitPulse AI_\n\n> Note: Could not assign suggested users (${assignees.join(', ')}) - they may not have access to this repository.`,
+        };
+
+        response = await fetch(githubApiUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/vnd.github+json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(issueDataWithoutAssignees),
+        });
+      }
+    }
+
     if (!response.ok) {
-      console.error('GitHub API error:', response.status, response.statusText, await response.text());
+      const errorText = await response.text();
+      console.error('GitHub API error:', response.status, response.statusText, errorText);
       throw new Error(`Failed to create GitHub issue: ${response.status} ${response.statusText}`);
     }
 

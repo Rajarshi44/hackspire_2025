@@ -89,22 +89,32 @@ const detectIssuePrompt = ai.definePrompt({
 
   {{#if mentions}}
   Mentioned users: {{mentions}}
-  If mentions are provided, these users should be included in the 'assignees' list for the issue when appropriate.
+  IMPORTANT: Only include users in 'assignees' if they are explicitly mentioned with the @ symbol in the recent messages AND their usernames are provided in the 'mentions' array. Do NOT guess or infer GitHub usernames from display names or similar names. The usernames in 'mentions' are already validated GitHub usernames.
   {{/if}}
 
   Output requirements:
   - Return a JSON object matching the schema exactly.
   - 'is_issue' must be a boolean.
-  - If 'is_issue' is true, fill 'title' with a concise, 6-12 word summary suitable for an issue title, 'description' with a clear reproduction or context (include steps if relevant), 'priority' as one of 'low', 'medium', or 'high'. Include 'assignees' only when mentions are provided or you can confidently map Slack handles to GitHub usernames.
+  - If 'is_issue' is true, fill 'title' with a concise, 6-12 word summary suitable for an issue title, 'description' with a clear reproduction or context (include steps if relevant), 'priority' as one of 'low', 'medium', or 'high'. 
+  - For 'assignees': ONLY include usernames that are explicitly provided in the 'mentions' array. Do NOT create, guess, or modify usernames. If no mentions are provided or if you're uncertain about the exact username, leave 'assignees' as an empty array.
   - If 'is_issue' is false, set 'is_issue' to false and return empty strings for 'title' and 'description', 'priority' can be 'low', and 'assignees' should be an empty array.
 
-  Example (issue detected):
+  Example (issue detected with valid mentions):
   {
     "is_issue": true,
     "title": "API returns 500 when creating user",
     "description": "Requests to POST /api/users return a 500 error intermittently. Steps: 1) POST payload X; 2) observe 500 with stack trace Y. Occurs on prod for user signups.",
     "priority": "high",
     "assignees": ["alice"]
+  }
+
+  Example (issue detected but no valid mentions):
+  {
+    "is_issue": true,
+    "title": "API returns 500 when creating user", 
+    "description": "Requests to POST /api/users return a 500 error intermittently. Steps: 1) POST payload X; 2) observe 500 with stack trace Y. Occurs on prod for user signups.",
+    "priority": "high",
+    "assignees": []
   }
 
   Example (no issue):
