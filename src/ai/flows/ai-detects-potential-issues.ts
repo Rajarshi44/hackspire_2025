@@ -80,7 +80,7 @@ const detectIssuePrompt = ai.definePrompt({
   - Requests like "this doesn't work", "we need", "should support", or "please fix"
   - Performance regressions, crashes, or data loss
 
-  If the user explicitly starts a message with `/issue` treat the remainder of that message as the issue title and generate the description from surrounding context.
+  If the user explicitly starts a message with \`/issue\` treat the remainder of that message as the issue title and generate the description from surrounding context.
 
   Chat History:
   {{#each messages}}
