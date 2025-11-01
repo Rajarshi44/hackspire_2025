@@ -35,28 +35,48 @@ function verifyGitHubSignature(
     return false;
   }
 
-  // GitHub sends signature as "sha256=<hash>"
-  const signatureBuffer = Buffer.from(signature.replace('sha256=', ''), 'hex');
-  const expectedBuffer = Buffer.from(
-    createHmac('sha256', secret).update(payload, 'utf8').digest('hex'),
-    'hex'
-  );
+  try {
+    // GitHub sends signature as "sha256=<hash>"
+    if (!signature.startsWith('sha256=')) {
+      console.error('Invalid signature format (missing sha256= prefix)');
+      return false;
+    }
 
-  // Use timing-safe comparison to prevent timing attacks
-  if (signatureBuffer.length !== expectedBuffer.length) {
-    console.error('Signature length mismatch');
+    const receivedHash = signature.replace('sha256=', '');
+    const expectedHash = createHmac('sha256', secret)
+      .update(payload, 'utf8')
+      .digest('hex');
+
+    console.log('Signature comparison:', {
+      receivedHashPrefix: receivedHash.substring(0, 16) + '...',
+      expectedHashPrefix: expectedHash.substring(0, 16) + '...',
+      receivedLength: receivedHash.length,
+      expectedLength: expectedHash.length,
+      payloadLength: payload.length
+    });
+
+    // Convert to buffers for timing-safe comparison
+    const signatureBuffer = Buffer.from(receivedHash, 'hex');
+    const expectedBuffer = Buffer.from(expectedHash, 'hex');
+
+    // Use timing-safe comparison to prevent timing attacks
+    if (signatureBuffer.length !== expectedBuffer.length) {
+      console.error('Signature length mismatch:', {
+        received: signatureBuffer.length,
+        expected: expectedBuffer.length
+      });
+      return false;
+    }
+
+    const isValid = timingSafeEqual(signatureBuffer, expectedBuffer);
+    
+    console.log('GitHub signature verification result:', isValid);
+
+    return isValid;
+  } catch (error: any) {
+    console.error('Error during signature verification:', error.message);
     return false;
   }
-
-  const isValid = timingSafeEqual(signatureBuffer, expectedBuffer);
-  
-  console.log('GitHub signature verification:', {
-    isValid,
-    signaturePrefix: signature.substring(0, 20) + '...',
-    payloadLength: payload.length
-  });
-
-  return isValid;
 }
 
 // ============================================================================
@@ -587,20 +607,32 @@ export async function POST(req: NextRequest) {
     const event = req.headers.get('x-github-event');
     const delivery = req.headers.get('x-github-delivery');
 
-    console.log('Webhook headers:', {
+    console.log('Webhook debug info:', {
       event,
       delivery,
-      hasSignature: !!signature
+      hasSignature: !!signature,
+      signatureLength: signature?.length || 0,
+      webhookSecretConfigured: !!webhookSecret,
+      webhookSecretLength: webhookSecret?.length || 0
     });
 
     // Get raw body for signature verification
     const rawBody = await req.text();
+    
+    console.log('Request body info:', {
+      bodyLength: rawBody.length,
+      bodyPreview: rawBody.substring(0, 100)
+    });
 
     // Verify signature
     const isValid = verifyGitHubSignature(rawBody, signature, webhookSecret);
 
     if (!isValid) {
-      console.error('❌ GitHub signature verification failed');
+      console.error('❌ GitHub signature verification failed', {
+        receivedSignature: signature,
+        bodyLength: rawBody.length,
+        secretLength: webhookSecret.length
+      });
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 401 }
