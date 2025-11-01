@@ -276,9 +276,10 @@ export class SlackUserService {
       if (slackUserId) {
         token = await this.getGitHubToken(slackUserId);
       }
-      // Fallback to env PAT if no user token
+      // Do NOT fall back to a global token by default — require user auth
       if (!token) {
-        token = process.env.GITHUB_FALLBACK_TOKEN || null;
+        console.warn('No GitHub token available for user; cannot fetch issues', { slackUserId });
+        return [];
       }
 
       // repoName expected in form 'owner/repo'
@@ -289,9 +290,7 @@ export class SlackUserService {
         'User-Agent': 'GitPulse-Bot/1.0'
       };
 
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      headers['Authorization'] = `Bearer ${token}`;
 
       const resp = await fetch(url, { headers });
       if (!resp.ok) {
@@ -323,7 +322,8 @@ export class SlackUserService {
         token = await this.getGitHubToken(slackUserId);
       }
       if (!token) {
-        token = process.env.GITHUB_FALLBACK_TOKEN || null;
+        console.warn('No GitHub token available for user; cannot fetch PRs', { slackUserId });
+        return [];
       }
 
       const url = `https://api.github.com/repos/${repoName}/pulls?per_page=30&state=all`;
@@ -331,9 +331,7 @@ export class SlackUserService {
         'Accept': 'application/vnd.github.v3+json',
         'User-Agent': 'GitPulse-Bot/1.0'
       };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      headers['Authorization'] = `Bearer ${token}`;
 
       const resp = await fetch(url, { headers });
       if (!resp.ok) {
@@ -347,6 +345,43 @@ export class SlackUserService {
     } catch (error) {
       console.error('Error fetching PRs from GitHub:', error);
       return [];
+    }
+  }
+
+  /**
+   * Create a GitHub issue in the specified repository using the user's GitHub token
+   */
+  async createIssueForRepository(repoName: string, title: string, body: string, slackUserId: string): Promise<{ number: number; url: string; title: string } | null> {
+    console.log('Creating GitHub issue:', { repoName, title, slackUserId });
+    try {
+      const token = await this.getGitHubToken(slackUserId);
+      if (!token) {
+        console.warn('No GitHub token available for user; cannot create issue', { slackUserId });
+        return null;
+      }
+
+      const url = `https://api.github.com/repos/${repoName}/issues`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'GitPulse-Bot/1.0',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ title, body })
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error('Failed to create GitHub issue', resp.status, resp.statusText, text);
+        return null;
+      }
+
+      const data = await resp.json();
+      return { number: data.number, url: data.html_url, title: data.title };
+    } catch (error) {
+      console.error('Error creating GitHub issue:', error);
+      return null;
     }
   }
 }

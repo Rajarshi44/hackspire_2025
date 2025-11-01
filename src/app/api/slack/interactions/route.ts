@@ -149,18 +149,43 @@ export async function POST(req: NextRequest) {
           const repoData = JSON.parse(action.value || '{}');
           const repository = repoData.repository;
 
-          // Get form data from the current message state (this is a simplified approach)
-          // In production, you'd want to use Slack modals for better form handling
+          // Try to extract title/description from the message blocks or fallback placeholders
+          let title = 'New issue from GitPulse';
+          let description = '';
+          try {
+            const blocks = payload.message?.blocks || [];
+            // Look for a section or input that may contain a title/description
+            for (const block of blocks) {
+              if (!title && block?.text?.text) title = block.text.text;
+              if (block?.block_id === 'issue_description_block' && block?.element?.initial_value) {
+                description = block.element.initial_value;
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
+
+          const { slackUserService } = await import('@/lib/slack-user-service');
+          const created = await slackUserService.createIssueForRepository(repository, title, description, userId || '');
+
+          if (!created) {
+            return NextResponse.json({
+              response_type: 'ephemeral',
+              replace_original: true,
+              text: '❌ Failed to create issue. Please ensure your GitHub account is connected and try again.'
+            });
+          }
+
           return NextResponse.json({
             response_type: 'ephemeral',
             replace_original: true,
-            text: '🔄 Creating GitHub Issue...',
+            text: `✅ Created issue #${created.number}: ${created.title}`,
             blocks: [
               {
                 type: 'section',
                 text: {
                   type: 'mrkdwn',
-                  text: `🔄 **Creating issue in:** \`${repository}\`\n\n⏳ Please wait while I create the GitHub issue...`
+                  text: `✅ Created issue <${created.url}|#${created.number} - ${created.title}> in \`${repository}\``
                 }
               }
             ]
