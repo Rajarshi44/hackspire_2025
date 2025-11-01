@@ -299,21 +299,66 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // TODO: create GitHub issue using stored GitHub token and return a success message.
-      // Acknowledge submission to Slack with an empty body (200) or a message
-      return NextResponse.json({
-        response_action: 'update',
-        view: {
-          type: 'modal',
-          title: { type: 'plain_text', text: 'Issue Created' },
-          blocks: [
-            {
-              type: 'section',
-              text: { type: 'mrkdwn', text: `✅ Created issue *${title}*\n\n${description}` }
-            }
-          ]
+      // Determine repository from private_metadata
+      let repository = '';
+      try {
+        const meta = payload.view?.private_metadata;
+        if (meta) {
+          const parsed = JSON.parse(meta);
+          repository = parsed.repository;
         }
-      });
+      } catch (e) {
+        // ignore
+      }
+
+      if (!repository) {
+        return NextResponse.json({
+          response_action: 'update',
+          view: {
+            type: 'modal',
+            title: { type: 'plain_text', text: 'Issue Creation Failed' },
+            blocks: [
+              { type: 'section', text: { type: 'mrkdwn', text: '❌ Repository not specified. Please try again.' } }
+            ]
+          }
+        });
+      }
+
+      try {
+        const { slackUserService } = await import('@/lib/slack-user-service');
+        const userId = payload.user?.id || '';
+        const created = await slackUserService.createIssueForRepository(repository, title || 'New issue from GitPulse', description || '', userId);
+
+        if (!created) {
+          return NextResponse.json({
+            response_action: 'update',
+            view: {
+              type: 'modal',
+              title: { type: 'plain_text', text: 'Issue Creation Failed' },
+              blocks: [
+                { type: 'section', text: { type: 'mrkdwn', text: '❌ Failed to create issue. Ensure your GitHub account is connected and try again.' } }
+              ]
+            }
+          });
+        }
+
+        return NextResponse.json({
+          response_action: 'update',
+          view: {
+            type: 'modal',
+            title: { type: 'plain_text', text: 'Issue Created' },
+            blocks: [
+              {
+                type: 'section',
+                text: { type: 'mrkdwn', text: `✅ Created issue <${created.url}|#${created.number} - ${created.title}> in \`${repository}\`` }
+              }
+            ]
+          }
+        });
+      } catch (error) {
+        console.error('Error creating issue from modal submission:', error);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+      }
     }
 
     // Default acknowledgement
