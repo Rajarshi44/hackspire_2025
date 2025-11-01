@@ -82,7 +82,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <UserNav />
             </div>
           </header>
-          <main className="flex-1 min-h-0 bg-black text-white">{children}</main>
+          <main className="relative bg-black text-white p-4">{children}</main>
         </SidebarInset>
       </div>
       {repoFullName && <InviteCollaboratorDialog isOpen={isInviteOpen} onOpenChange={setInviteOpen} repoFullName={repoFullName} />}

@@ -19,6 +19,7 @@ import { aiListGithubPRs } from '@/ai/flows/ai-list-github-prs';
 import Link from 'next/link';
 import KanbanBoard, { KanbanIssue } from '@/components/kanban-board';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
+import { usePathname } from 'next/navigation';
 
 type ChatInterfaceProps = {
   repoFullName: string;
@@ -29,11 +30,24 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
   const { user, githubToken } = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const pathname = usePathname();
   const [isCreatingIssue, setIsCreatingIssue] = useState(false);
   const [isBotThinking, setIsBotThinking] = useState(false);
   const [isKanbanOpen, setIsKanbanOpen] = useState(false);
   const [isMdUp, setIsMdUp] = useState(false);
   const gitpulseAvatarUrl = 'https://i.postimg.cc/bvnz3hxH/Gemini-Generated-Image-s0q3tjs0q3tjs0q3.png';
+
+  // Determine if we're in a repo view to calculate sidebar width
+  const pathSegments = pathname.split('/').filter(Boolean);
+  const isRepoView = pathSegments.length >= 3 && pathSegments[0] === 'dashboard';
+  
+  // Calculate left margin based on sidebar state
+  const getLeftMargin = () => {
+    if (!isMdUp) return 'left-4'; // Mobile: no sidebar offset
+    // In repo view, sidebar is in offcanvas mode but still visible on desktop
+    // In dashboard view, sidebar is in icon mode (narrower)
+    return 'left-[17rem]'; // Both cases: account for full sidebar width (16rem + 1rem margin)
+  };
 
   const encodedRepoFullName = encodeURIComponent(repoFullName);
 
@@ -482,13 +496,13 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
   const sheetOpen = isKanbanOpen && !isMdUp;
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden bg-black md:flex-row">
+    <div className="fixed left-4 right-4 top-20 bottom-4 flex max-h-[calc(100vh-6rem)] overflow-hidden bg-black md:left-[calc(16rem+1rem)] md:flex-row z-40">
       {/* Chat panel: full width by default, halves when Kanban is open (desktop) */}
       <div
         className={
           sidePanelOpen
-            ? 'flex min-h-0 min-w-0 flex-1 flex-col transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50 md:w-1/2'
-            : 'flex min-h-0 min-w-0 flex-1 flex-col transition-all duration-300 bg-card/80 backdrop-blur-lg shadow-lg rounded-lg border border-border/50'
+            ? 'flex min-h-0 min-w-0 flex-1 flex-col transition-all duration-300 bg-card/90 backdrop-blur-lg shadow-2xl rounded-lg border border-border/50 md:w-1/2'
+            : 'flex min-h-0 min-w-0 flex-1 flex-col transition-all duration-300 bg-card/90 backdrop-blur-lg shadow-2xl rounded-lg border border-border/50'
         }
       >
   {/* Header */}
@@ -500,7 +514,10 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
           </Button>
         </div>
         {/* Messages */}
-        <div ref={scrollAreaRef} className="flex-1 min-h-0 overflow-y-auto">
+        <div 
+          ref={scrollAreaRef} 
+          className="flex-1 min-h-0 overflow-y-auto max-h-[60vh] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border/50 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-border"
+        >
           <div className="p-2 sm:p-4 space-y-4 pt-6">
             {isLoading && messages.length === 0 && (
               <div className="flex justify-center items-center h-full">
@@ -563,8 +580,10 @@ export function ChatInterface({ repoFullName, channelId }: ChatInterfaceProps) {
       </div>
       {/* Kanban board: desktop (side panel), mobile (Sheet) */}
       {sidePanelOpen && (
-        <div className="hidden min-h-0 min-w-0 md:flex md:w-1/2 border-l bg-background rounded-r-lg shadow-lg">
-          <KanbanBoard repoFullName={repoFullName} aiIssues={aiIssuesForKanban} className="h-full w-full" />
+        <div className="hidden min-h-0 min-w-0 md:flex md:w-1/2 border-l bg-background/90 backdrop-blur-lg rounded-r-lg shadow-2xl overflow-hidden">
+          <div className="h-full w-full overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border/50 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-border">
+            <KanbanBoard repoFullName={repoFullName} aiIssues={aiIssuesForKanban} className="h-full w-full" />
+          </div>
         </div>
       )}
       {/* Mobile Kanban as a Sheet */}
